@@ -5,7 +5,7 @@ experiment/.idea/inspectionProfiles/profiles_settings.xml
 experiment/.idea/misc.xml
 experiment/.idea/modules.xml
 experiment/.idea/vcs.xml
-experiment/scripts/results/
+results/
 *.csv
 .replit
 replit.nix

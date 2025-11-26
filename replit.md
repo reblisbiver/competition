@@ -12,12 +12,11 @@ This is a PHP-based web application for the Choice Engineering Competition, an a
 - **experiment/scripts/backend_interaction.js** - AJAX communication between frontend and backend
 - **experiment/sequences/static/** - Static reward schedules (PHP arrays)
 - **experiment/sequences/dynamic/** - Dynamic reward schedules (Python scripts)
-- **experiment/scripts/results/** - Directory where experiment data is saved as CSV files
-
 ### Data Storage
 - Data files (CSV and JSON) are stored in `data/` and `data_unfiltered/` directories
-- New experiment results are written to `experiment/scripts/results/`
+- New experiment results are written to `results/` (outside the web root for security)
 - Results are organized by schedule type (STATIC/DYNAMIC) and schedule name
+- **Security Note**: Results are stored outside the web root to prevent direct web access to sensitive participant data
 
 ## How It Works
 
@@ -76,14 +75,21 @@ $_SESSION['schedule_name'] = "random_0"; // name of schedule file
 2. Script receives: bias_rewards history, unbias_rewards history, choice history, user_id
 3. Script should output: "biased_reward, unbiased_reward"
 
+## Dynamic Schedules and Python
+If using DYNAMIC reward schedules, Python will be needed. The backend.php file calls Python scripts from `experiment/sequences/dynamic/` to generate adaptive reward schedules based on participant behavior. To enable dynamic schedules:
+1. Install Python if not already available
+2. Ensure Python scripts in `sequences/dynamic/` are executable
+3. Scripts receive JSON arrays of choices/rewards and output: "biased_reward, unbiased_reward"
+
 ## Recent Changes
 - 2025-11-26: Set up for Replit environment
   - Installed PHP 8.2 module
   - Created index.php for automatic redirect to main.php
   - Configured workflow to run PHP server on port 5000
-  - Created results directory structure
+  - Moved results directory outside web root (`results/`) for security
   - Updated .gitignore to exclude results and CSV files
   - Configured deployment for VM target
+  - Fixed Windows line endings in backend.php
 
 ## External Resources
 - [Competition Website](http://decision-making-lab.com/competition/index.html)

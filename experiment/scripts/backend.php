@@ -91,7 +91,7 @@ function write_trial_data_csv($is_biased_choice, $current_reward, $current_unobs
         . PHP_EOL;
     file_put_contents($file_name, $trial_data, FILE_APPEND);
 }
-$path = "results/" . $_SESSION['schedule_type'] . "/" . $_SESSION['schedule_name'] . "/";
+$path = __DIR__ . "/../../results/" . $_SESSION['schedule_type'] . "/" . $_SESSION['schedule_name'] . "/";
 if (!file_exists($path)) { // Create the results directory for current mechanism if it doesn't exist yest
     mkdir($path, 0777, true);
 }
