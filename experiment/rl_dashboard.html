@@ -217,7 +217,7 @@ GET /rl_api.php?action=list_schedules
                 });
         }
         
-        var stepSession = null;
+        var currentSessionId = null;
         
         function runStepByStep() {
             var initUrl = getApiUrl('init');
@@ -231,9 +231,9 @@ GET /rl_api.php?action=list_schedules
                 .then(response => response.json())
                 .then(data => {
                     if (data.success) {
+                        currentSessionId = data.data.session_id;
                         document.getElementById('user-id').textContent = data.data.user_id;
                         document.getElementById('biased-side').textContent = data.data.biased_side;
-                        stepSession = true;
                         runNextTrial();
                     } else {
                         alert('Init failed: ' + data.error);
@@ -242,7 +242,10 @@ GET /rl_api.php?action=list_schedules
         }
         
         function runNextTrial() {
-            var trialUrl = window.location.origin + window.location.pathname.replace('rl_dashboard.html', 'rl_api.php') + '?action=run_trial';
+            if (!currentSessionId) return;
+            
+            var baseUrl = window.location.origin + window.location.pathname.replace('rl_dashboard.html', 'rl_api.php');
+            var trialUrl = baseUrl + '?action=run_trial&session_id=' + currentSessionId;
             
             fetch(trialUrl)
                 .then(response => response.json())
@@ -261,7 +264,12 @@ GET /rl_api.php?action=list_schedules
                         
                         if (data.data.status !== 'completed') {
                             setTimeout(runNextTrial, 100);
+                        } else {
+                            currentSessionId = null;
                         }
+                    } else {
+                        alert('Trial failed: ' + data.error);
+                        currentSessionId = null;
                     }
                 });
         }

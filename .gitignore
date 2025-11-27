@@ -7,7 +7,9 @@ experiment/.idea/modules.xml
 experiment/.idea/vcs.xml
 results/
 results_rl/
+rl_sessions/
 experiment/rl_agents/q_tables/
 *.csv
+*.json
 .replit
 replit.nix
