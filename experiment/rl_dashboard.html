@@ -160,11 +160,27 @@ GET /rl_api.php?action=list_schedules
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
     <script>
-        // 定义可用的序列
-        const scheduleOptions = {
-            'STATIC': ['random_0', 'example_biased', 'example_alternating'],
-            'DYNAMIC': ['example_wsls']
+        // 存储从API获取的序列列表
+        let scheduleOptions = {
+            'STATIC': [],
+            'DYNAMIC': []
         };
+        
+        function fetchSchedules() {
+            var baseUrl = window.location.origin + window.location.pathname.replace('rl_dashboard.html', 'rl_api.php');
+            var listUrl = baseUrl + '?action=list_schedules';
+            
+            fetch(listUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        scheduleOptions['STATIC'] = data.data.static;
+                        scheduleOptions['DYNAMIC'] = data.data.dynamic;
+                        updateScheduleOptions();
+                    }
+                })
+                .catch(error => console.error('Failed to fetch schedules:', error));
+        }
         
         function updateScheduleOptions() {
             var scheduleType = document.getElementById('schedule_type').value;
@@ -177,7 +193,7 @@ GET /rl_api.php?action=list_schedules
             // 添加新选项
             options.forEach(function(name) {
                 var option = document.createElement('option');
-                option.value = name;
+                option.value = name.replace(' (custom)', '');
                 option.textContent = name;
                 scheduleSelect.appendChild(option);
             });
@@ -185,7 +201,7 @@ GET /rl_api.php?action=list_schedules
         
         // 页面加载时初始化
         document.addEventListener('DOMContentLoaded', function() {
-            updateScheduleOptions();
+            fetchSchedules();
         });
         
         function getApiUrl(action) {

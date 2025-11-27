@@ -144,14 +144,14 @@ def constrain(previous_allocation, current_allocation):
     allocated_rewards = sum(previous_allocation)
 
     # If all rewards were already allocated, no more rewards may be allocated
-    if allocated_rewards>=TOTAL_REWARDS:
+    if allocated_rewards >= TOTAL_REWARDS:
         return 0
 
     # If there are as many trials left as rewards left, in all remaining trials
     # rewards should be allocated
     current_trial_number = len(previous_allocation)
     remaining_trials = NUMBER_OF_TRIALS - current_trial_number
-    if remaining_trials == (TOTAL_REWARDS-allocated_rewards):
+    if remaining_trials == (TOTAL_REWARDS - allocated_rewards):
         return 1
 
     # No constrain should be imposed
@@ -177,7 +177,7 @@ def parse_input():
         rewards allocation to anti-target alternative: {1=reward, 0=no reward},
         choices: {1=choice in target alternative, 0=choice in anti-target})
     """
-    if sys.argv[1]=="[]": #This is first trial, don't try parsing:
+    if sys.argv[1] == "[]":  #This is first trial, don't try parsing:
         return [], [], []
     else:
         target_allocations = parse_lst(sys.argv[1])
@@ -213,6 +213,7 @@ def output(target, anti_target):
     elif not target and not anti_target:
         print(NO_REWARDS_BOTH_ALTERNATIVES)
 
+
 ###############################################################################
 # Debug
 # if you want it to output to
@@ -221,6 +222,8 @@ def output(target, anti_target):
 ###############################################################################
 counter = 0
 text_agg = ''
+
+
 def debug(txt="hi"):
     global counter
     global text_agg
@@ -228,10 +231,12 @@ def debug(txt="hi"):
     text_agg = text_agg + " ### " + str(counter) + ":" + str(txt)
     print(text_agg)
 
+
 def parse_lst(lst):
     as_python_lst = lst.strip('[').strip(']').split(',')
     as_python_elements = [ast.literal_eval(el) for el in as_python_lst]
     return as_python_elements
+
 
 ###############################################################################
 # Run
