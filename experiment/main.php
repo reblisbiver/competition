@@ -18,10 +18,15 @@ $_SESSION['unbias_rewards'] = array();
 // Choose reward assignment type
 $TYPE_DYNAMIC = "DYNAMIC";
 $TYPE_STATIC = "STATIC";
-$_SESSION['schedule_type'] = $TYPE_STATIC;
+
+// Read from URL parameters or use defaults
+$_SESSION['schedule_type'] = isset($_GET['schedule_type']) ? strtoupper($_GET['schedule_type']) : $TYPE_STATIC;
+if ($_SESSION['schedule_type'] !== $TYPE_DYNAMIC && $_SESSION['schedule_type'] !== $TYPE_STATIC) {
+    $_SESSION['schedule_type'] = $TYPE_STATIC;
+}
 
 // Choose specific sequence (from the "sequences" folder)
-$_SESSION['schedule_name'] = "random_0";
+$_SESSION['schedule_name'] = isset($_GET['schedule_name']) ? $_GET['schedule_name'] : "random_0";
 
 // Choose Right/Left buttons as biased/anti-biased side
 if (rand(1,2)==1){

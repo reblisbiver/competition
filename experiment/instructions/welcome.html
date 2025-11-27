@@ -86,7 +86,29 @@
 
         <div id="start_button" class="centered_content">
             <br />
-            <a class="btn btn-primary" href="../main.php" role="button">开始</a>
+            <a class="btn btn-primary" id="start-btn" href="../main.php" role="button">开始</a>
         </div>
+        
+        <script>
+            // 自动将URL参数传递给main.php
+            document.addEventListener('DOMContentLoaded', function() {
+                const params = new URLSearchParams(window.location.search);
+                let href = '../main.php';
+                
+                if (params.has('schedule_type') || params.has('schedule_name')) {
+                    href += '?';
+                    const parts = [];
+                    if (params.has('schedule_type')) {
+                        parts.push('schedule_type=' + encodeURIComponent(params.get('schedule_type')));
+                    }
+                    if (params.has('schedule_name')) {
+                        parts.push('schedule_name=' + encodeURIComponent(params.get('schedule_name')));
+                    }
+                    href += parts.join('&');
+                }
+                
+                document.getElementById('start-btn').href = href;
+            });
+        </script>
     </body>
 </html>
