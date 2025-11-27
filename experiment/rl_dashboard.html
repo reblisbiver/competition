@@ -42,15 +42,18 @@
                             </div>
                             <div class="form-group">
                                 <label>序列类型</label>
-                                <select class="form-control" id="schedule_type">
+                                <select class="form-control" id="schedule_type" onchange="updateScheduleOptions()">
                                     <option value="STATIC">STATIC (静态)</option>
                                     <option value="DYNAMIC">DYNAMIC (动态)</option>
                                 </select>
                             </div>
                             <div class="form-group">
                                 <label>序列名称</label>
-                                <input type="text" class="form-control" id="schedule_name" value="random_0">
-                                <small class="text-muted">可用: random_0, example_biased, example_alternating, example_wsls</small>
+                                <select class="form-control" id="schedule_name">
+                                    <option value="random_0">random_0</option>
+                                    <option value="example_biased">example_biased</option>
+                                    <option value="example_alternating">example_alternating</option>
+                                </select>
                             </div>
                             <div class="form-group">
                                 <label>试次数量</label>
@@ -157,6 +160,34 @@ GET /rl_api.php?action=list_schedules
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
     <script>
+        // 定义可用的序列
+        const scheduleOptions = {
+            'STATIC': ['random_0', 'example_biased', 'example_alternating'],
+            'DYNAMIC': ['example_wsls']
+        };
+        
+        function updateScheduleOptions() {
+            var scheduleType = document.getElementById('schedule_type').value;
+            var scheduleSelect = document.getElementById('schedule_name');
+            var options = scheduleOptions[scheduleType] || [];
+            
+            // 清空现有选项
+            scheduleSelect.innerHTML = '';
+            
+            // 添加新选项
+            options.forEach(function(name) {
+                var option = document.createElement('option');
+                option.value = name;
+                option.textContent = name;
+                scheduleSelect.appendChild(option);
+            });
+        }
+        
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            updateScheduleOptions();
+        });
+        
         function getApiUrl(action) {
             var model = document.getElementById('model').value;
             var scheduleType = document.getElementById('schedule_type').value;
