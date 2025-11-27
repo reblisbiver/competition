@@ -39,9 +39,9 @@ $_SESSION["total_reward"] = 0;
 
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
-    <title>Repeated choice</title>
+    <title>重复选择</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
@@ -57,14 +57,14 @@ $_SESSION["total_reward"] = 0;
 <nav class="navbar navbar-inverse">
     <div class="container-fluid">
         <div class="navbar-header">
-            <span class="navbar-brand">Repeated choice</span>
+            <span class="navbar-brand">重复选择</span>
         </div>
         <div class="collapse navbar-collapse" id="myNavbar">
             <ul class="nav navbar-nav">
-                <li class="inactive_nav">(1) Instructions</li>
-                <li class="active_nav">(2) Task</li>
-                <li class="inactive_nav">(3) Collect payment</li>
-                <li id="filler">(4) filler </li>
+                <li class="inactive_nav">(1) 说明</li>
+                <li class="active_nav">(2) 任务</li>
+                <li class="inactive_nav">(3) 领取报酬</li>
+                <li id="filler">(4) 填充项 </li>
             </ul>
             <ul class="nav navbar-nav navbar-right">
             </ul>
@@ -77,10 +77,10 @@ $_SESSION["total_reward"] = 0;
         <div class="col-sm-2 sidenav justify_text" id="please_choose_text">
             <br>
             <p>
-                Please choose between the two buttons.
+                请在两个按钮之间选择。
             </p>
             <p>
-                Your goal is to collect as many smiley faces as possible.
+                你的目标是收集尽可能多的笑脸表情。
             </p>
         </div>
         <div class="col-sm-8 text-center centered_content" id="button_table">
@@ -107,7 +107,7 @@ $_SESSION["total_reward"] = 0;
                 <tr class="counter">
                     <th> </th>
                     <th>
-                        <p>Total reward collected:</p><div id="total_reward">0</div>
+                        <p>已收集总奖励：</p><div id="total_reward">0</div>
                     </th>
                     <th> </th>
             </table>
@@ -121,7 +121,7 @@ $_SESSION["total_reward"] = 0;
 <footer class="container-fluid text-center" id="text_left">
     <!--<p>Footer Text</p>-->
     <p>
-        <div id="trials_left"></div> trials left.
+        <div id="trials_left"></div> 剩余试验次数。
     </p>
 </footer>
 

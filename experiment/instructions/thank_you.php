@@ -2,9 +2,9 @@
 session_start();
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html lang="zh-CN">
 <head>
-    <title>Repeated choice</title>
+    <title>重复选择</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
@@ -28,14 +28,14 @@ session_start();
                 <span class="icon-bar"></span>
                 <span class="icon-bar"></span>
             </button>
-            <a class="navbar-brand" href="">Repeated choice</a>
+            <a class="navbar-brand" href="">重复选择</a>
         </div>
         <div class="collapse navbar-collapse" id="myNavbar">
             <ul class="nav navbar-nav">
-                <li class="inactive_nav">(1) Instructions</li>
-                <li class="inactive_nav">(2) Task</li>
-                <li class="active_nav">(3) Collect payment</li>
-                <li id="filler">(4) filler </li>
+                <li class="inactive_nav">(1) 说明</li>
+                <li class="inactive_nav">(2) 任务</li>
+                <li class="active_nav">(3) 领取报酬</li>
+                <li id="filler">(4) 填充项 </li>
             </ul>
             <ul class="nav navbar-nav navbar-right">
             </ul>
@@ -52,15 +52,15 @@ session_start();
             <!--<p><a href="#">Link</a></p>-->
         </div>
         <div class="col-sm-8 text-left">
-            <h1>Thank you for your participation</h1>
+            <h1>感谢你的参与</h1>
             <hr>
             <p>
-                Insert the following code to collect your payment at Amazon Mechanical Turk:
+                请将以下代码输入Amazon Mechanical Turk以领取报酬：
             </p>
             <br>
             <h3 id="payment_id"></h3>
             <p>
-                You can close this window now.
+                你现在可以关闭此窗口。
             </p>
         </div>
         <div class="col-sm-2 sidenav">
