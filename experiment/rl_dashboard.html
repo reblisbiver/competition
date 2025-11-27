@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RL Experiment Dashboard</title>
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css">
+    <style>
+        body { padding: 20px; background: #f5f5f5; }
+        .panel { margin-bottom: 20px; }
+        .result-box { background: #fff; padding: 15px; border-radius: 5px; margin-top: 15px; max-height: 400px; overflow-y: auto; }
+        .trial-row { padding: 5px; border-bottom: 1px solid #eee; }
+        .trial-row.reward { background: #dff0d8; }
+        .trial-row.no-reward { background: #f2dede; }
+        .stats { font-size: 24px; font-weight: bold; }
+        .api-url { font-family: monospace; background: #f0f0f0; padding: 10px; border-radius: 5px; word-break: break-all; }
+        #loading { display: none; }
+        .progress { height: 25px; }
+        .progress-bar { line-height: 25px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>RL Experiment Dashboard</h1>
+        <p class="text-muted">强化学习实验控制面板 - 通过URL参数配置和运行RL实验</p>
+        
+        <div class="row">
+            <div class="col-md-6">
+                <div class="panel panel-primary">
+                    <div class="panel-heading">
+                        <h3 class="panel-title">实验配置</h3>
+                    </div>
+                    <div class="panel-body">
+                        <form id="config-form">
+                            <div class="form-group">
+                                <label>RL模型</label>
+                                <select class="form-control" id="model">
+                                    <option value="simple_ql">simple_ql (Q-Learning)</option>
+                                    <option value="random_agent">random_agent (随机)</option>
+                                    <option value="ucb_agent">ucb_agent (UCB)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>序列类型</label>
+                                <select class="form-control" id="schedule_type">
+                                    <option value="STATIC">STATIC (静态)</option>
+                                    <option value="DYNAMIC">DYNAMIC (动态)</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>序列名称</label>
+                                <input type="text" class="form-control" id="schedule_name" value="random_0">
+                                <small class="text-muted">可用: random_0, example_biased, example_alternating, example_wsls</small>
+                            </div>
+                            <div class="form-group">
+                                <label>试次数量</label>
+                                <input type="number" class="form-control" id="trials" value="100" min="1" max="1000">
+                            </div>
+                            <button type="button" class="btn btn-primary btn-block" onclick="runExperiment()">
+                                运行实验
+                            </button>
+                            <button type="button" class="btn btn-info btn-block" onclick="runStepByStep()">
+                                逐步执行
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                
+                <div class="panel panel-info">
+                    <div class="panel-heading">
+                        <h3 class="panel-title">API URL</h3>
+                    </div>
+                    <div class="panel-body">
+                        <div class="api-url" id="api-url">
+                            点击上方按钮生成API URL
+                        </div>
+                        <button class="btn btn-default btn-sm" style="margin-top: 10px;" onclick="copyUrl()">
+                            复制URL
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="panel panel-success">
+                    <div class="panel-heading">
+                        <h3 class="panel-title">实验结果</h3>
+                    </div>
+                    <div class="panel-body">
+                        <div id="loading" class="text-center">
+                            <div class="progress">
+                                <div class="progress-bar progress-bar-striped active" id="progress-bar" style="width: 0%">
+                                    0%
+                                </div>
+                            </div>
+                            <p>正在运行实验...</p>
+                        </div>
+                        
+                        <div id="stats" style="display: none;">
+                            <div class="row text-center">
+                                <div class="col-xs-4">
+                                    <div class="stats text-success" id="total-reward">0</div>
+                                    <small>总奖励</small>
+                                </div>
+                                <div class="col-xs-4">
+                                    <div class="stats text-primary" id="left-count">0</div>
+                                    <small>选择LEFT</small>
+                                </div>
+                                <div class="col-xs-4">
+                                    <div class="stats text-warning" id="right-count">0</div>
+                                    <small>选择RIGHT</small>
+                                </div>
+                            </div>
+                            <hr>
+                            <p><strong>User ID:</strong> <span id="user-id"></span></p>
+                            <p><strong>偏向侧:</strong> <span id="biased-side"></span></p>
+                            <p><strong>CSV路径:</strong> <span id="csv-path" class="text-muted"></span></p>
+                        </div>
+                        
+                        <div class="result-box" id="trials-box" style="display: none;">
+                            <h5>试次详情</h5>
+                            <div id="trials-list"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="panel panel-default">
+            <div class="panel-heading">
+                <h3 class="panel-title">使用说明</h3>
+            </div>
+            <div class="panel-body">
+                <h5>1. 直接通过URL调用API</h5>
+                <pre>
+# 完整运行实验
+GET /rl_api.php?action=run_all&model=simple_ql&schedule_type=STATIC&schedule_name=random_0&trials=100
+
+# 分步执行
+GET /rl_api.php?action=init&model=simple_ql&trials=50  # 初始化
+GET /rl_api.php?action=run_trial                        # 执行单个试次
+GET /rl_api.php?action=status                           # 查看状态
+
+# 查看可用选项
+GET /rl_api.php?action=list_models
+GET /rl_api.php?action=list_schedules
+                </pre>
+                
+                <h5>2. 添加自定义模型</h5>
+                <p>在 <code>rl_agents/models/</code> 目录下创建Python脚本，详见 <code>rl_agents/README.md</code></p>
+                
+                <h5>3. 添加自定义序列</h5>
+                <p>在 <code>custom_sequences/</code> 目录下创建PHP(静态)或Python(动态)脚本，详见 <code>custom_sequences/README.md</code></p>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.3.1/jquery.min.js"></script>
+    <script>
+        function getApiUrl(action) {
+            var model = document.getElementById('model').value;
+            var scheduleType = document.getElementById('schedule_type').value;
+            var scheduleName = document.getElementById('schedule_name').value;
+            var trials = document.getElementById('trials').value;
+            
+            var baseUrl = window.location.origin + window.location.pathname.replace('rl_dashboard.html', 'rl_api.php');
+            return baseUrl + '?action=' + action + 
+                   '&model=' + model + 
+                   '&schedule_type=' + scheduleType + 
+                   '&schedule_name=' + scheduleName + 
+                   '&trials=' + trials;
+        }
+        
+        function runExperiment() {
+            var url = getApiUrl('run_all');
+            document.getElementById('api-url').textContent = url;
+            
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('stats').style.display = 'none';
+            document.getElementById('trials-box').style.display = 'none';
+            document.getElementById('progress-bar').style.width = '50%';
+            document.getElementById('progress-bar').textContent = '运行中...';
+            
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('loading').style.display = 'none';
+                    
+                    if (data.success) {
+                        document.getElementById('stats').style.display = 'block';
+                        document.getElementById('trials-box').style.display = 'block';
+                        
+                        document.getElementById('total-reward').textContent = data.data.total_reward;
+                        document.getElementById('left-count').textContent = data.data.left_count;
+                        document.getElementById('right-count').textContent = data.data.right_count;
+                        document.getElementById('user-id').textContent = data.data.user_id;
+                        document.getElementById('biased-side').textContent = data.data.biased_side;
+                        document.getElementById('csv-path').textContent = data.data.csv_path;
+                        
+                        var trialsList = document.getElementById('trials-list');
+                        trialsList.innerHTML = '';
+                        data.data.trials.forEach(function(trial) {
+                            var row = document.createElement('div');
+                            row.className = 'trial-row ' + (trial.reward ? 'reward' : 'no-reward');
+                            row.innerHTML = '<strong>Trial ' + trial.trial + ':</strong> ' + 
+                                           trial.action + ' → ' + (trial.reward ? '✓' : '✗') +
+                                           ' <small>(' + (trial.is_biased === 'True' ? '偏向' : '非偏向') + ')</small>';
+                            trialsList.appendChild(row);
+                        });
+                    } else {
+                        alert('Error: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('loading').style.display = 'none';
+                    alert('Request failed: ' + error);
+                });
+        }
+        
+        var stepSession = null;
+        
+        function runStepByStep() {
+            var initUrl = getApiUrl('init');
+            document.getElementById('api-url').textContent = initUrl;
+            
+            document.getElementById('stats').style.display = 'block';
+            document.getElementById('trials-box').style.display = 'block';
+            document.getElementById('trials-list').innerHTML = '';
+            
+            fetch(initUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('user-id').textContent = data.data.user_id;
+                        document.getElementById('biased-side').textContent = data.data.biased_side;
+                        stepSession = true;
+                        runNextTrial();
+                    } else {
+                        alert('Init failed: ' + data.error);
+                    }
+                });
+        }
+        
+        function runNextTrial() {
+            var trialUrl = window.location.origin + window.location.pathname.replace('rl_dashboard.html', 'rl_api.php') + '?action=run_trial';
+            
+            fetch(trialUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('total-reward').textContent = data.data.total_reward;
+                        document.getElementById('left-count').textContent = data.data.left_count;
+                        document.getElementById('right-count').textContent = data.data.right_count;
+                        
+                        var trialsList = document.getElementById('trials-list');
+                        var row = document.createElement('div');
+                        row.className = 'trial-row ' + (data.data.reward ? 'reward' : 'no-reward');
+                        row.innerHTML = '<strong>Trial ' + data.data.trial + ':</strong> ' + 
+                                       data.data.action + ' → ' + (data.data.reward ? '✓' : '✗');
+                        trialsList.insertBefore(row, trialsList.firstChild);
+                        
+                        if (data.data.status !== 'completed') {
+                            setTimeout(runNextTrial, 100);
+                        }
+                    }
+                });
+        }
+        
+        function copyUrl() {
+            var url = document.getElementById('api-url').textContent;
+            navigator.clipboard.writeText(url).then(function() {
+                alert('URL已复制到剪贴板');
+            });
+        }
+    </script>
+</body>
+</html>

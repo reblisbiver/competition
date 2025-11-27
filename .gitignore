@@ -6,6 +6,8 @@ experiment/.idea/misc.xml
 experiment/.idea/modules.xml
 experiment/.idea/vcs.xml
 results/
+results_rl/
+experiment/rl_agents/q_tables/
 *.csv
 .replit
 replit.nix
