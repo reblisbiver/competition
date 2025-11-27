@@ -1,13 +1,10 @@
+#!/usr/bin/env python3
+"""
 Simple Q-Learning Agent
 A basic epsilon-greedy Q-learning agent for the choice experiment.
 
 Usage: python3 simple_ql.py <user_id> <last_action> <last_reward>
 Output: LEFT or RIGHT
-
-Parameters:
-    user_id: Unique identifier for this experiment session
-    last_action: Previous action taken (LEFT/RIGHT/None)
-    last_reward: Reward received for last action (0/1/None)
 """
 import sys
 import os
