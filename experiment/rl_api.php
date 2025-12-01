@@ -5,6 +5,11 @@ header('Access-Control-Allow-Methods: GET, POST');
 
 $response = ['success' => false, 'error' => '', 'data' => []];
 
+$VENV_PYTHON = __DIR__ . '/../.venv/bin/python3';
+if (!file_exists($VENV_PYTHON)) {
+    $VENV_PYTHON = 'python3';
+}
+
 $action = $_GET['action'] ?? 'run_trial';
 $rl_model = $_GET['model'] ?? 'simple_ql';
 $schedule_type = strtoupper($_GET['schedule_type'] ?? 'STATIC');
@@ -146,7 +151,8 @@ if ($action === 'run_trial') {
         $model_script = __DIR__ . "/rl_agents/simple_ql.py";
     }
     
-    $command = "python3 {$model_script} " . escapeshellarg($user_id) . " " . escapeshellarg($last_action) . " " . escapeshellarg($last_reward) . " 2>&1";
+    global $VENV_PYTHON;
+    $command = "{$VENV_PYTHON} {$model_script} " . escapeshellarg($user_id) . " " . escapeshellarg($last_action) . " " . escapeshellarg($last_reward) . " 2>&1";
     $rl_action = trim(exec($command, $output, $return_code));
     
     if ($return_code !== 0 || !in_array($rl_action, ['LEFT', 'RIGHT'])) {
@@ -181,7 +187,8 @@ if ($action === 'run_trial') {
             $script_path = __DIR__ . "/sequences/dynamic/{$schedule_name}.py";
         }
         
-        $run_python_command = "python3 {$script_path} "
+        global $VENV_PYTHON;
+        $run_python_command = "{$VENV_PYTHON} {$script_path} "
             . escapeshellarg(json_encode($sess['bias_rewards'])) . ' '
             . escapeshellarg(json_encode($sess['unbias_rewards'])) . ' '
             . escapeshellarg(json_encode($sess['is_bias_choice'])) . ' '
@@ -325,7 +332,8 @@ if ($action === 'run_all') {
             $model_script = __DIR__ . "/rl_agents/simple_ql.py";
         }
         
-        $command = "python3 {$model_script} " . escapeshellarg($user_id) . " " . escapeshellarg($last_action) . " " . escapeshellarg($last_reward) . " 2>&1";
+        global $VENV_PYTHON;
+        $command = "{$VENV_PYTHON} {$model_script} " . escapeshellarg($user_id) . " " . escapeshellarg($last_action) . " " . escapeshellarg($last_reward) . " 2>&1";
         $rl_action = trim(exec($command, $output, $return_code));
         $output = [];
         
@@ -359,7 +367,8 @@ if ($action === 'run_all') {
                 $script_path = __DIR__ . "/sequences/dynamic/{$schedule_name}.py";
             }
             
-            $run_python_command = "python3 {$script_path} "
+            global $VENV_PYTHON;
+            $run_python_command = "{$VENV_PYTHON} {$script_path} "
                 . escapeshellarg(json_encode($sess['bias_rewards'])) . ' '
                 . escapeshellarg(json_encode($sess['unbias_rewards'])) . ' '
                 . escapeshellarg(json_encode($sess['is_bias_choice'])) . ' '
