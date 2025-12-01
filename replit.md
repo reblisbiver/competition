@@ -53,6 +53,7 @@ curl "/rl_api.php?action=list_schedules"
 - **simple_ql** - Q-Learning (ε-greedy)
 - **random_agent** - 随机选择 (基线)
 - **ucb_agent** - Upper Confidence Bound
+- **neural_ql** - 神经网络增强Q-Learning (LSTM + Attention，从人类数据训练)
 
 ### 添加新RL模型
 1. 在 `experiment/rl_agents/models/` 创建Python脚本
@@ -110,7 +111,45 @@ php -S 0.0.0.0:5000 -t experiment
 - RL控制面板: `/rl_dashboard.html`
 - RL API: `/rl_api.php`
 
+## Neural Q-Learning System (神经网络增强Q-Learning)
+
+### 概述
+使用 LSTM + Self-Attention 的神经网络架构，从真实人类被试数据中学习决策模式。
+
+### 文件结构
+```
+experiment/rl_agents/neural_ql/
+├── data_loader.py      # 数据加载和预处理
+├── model.py            # 神经网络模型定义
+├── train.py            # 训练脚本
+├── neural_ql_agent.py  # 实验代理
+├── evaluate.py         # 模型评估工具
+├── trained_models/     # 保存的模型
+└── README.md           # 详细文档
+```
+
+### 训练模型
+```bash
+source .venv/bin/activate
+cd experiment/rl_agents/neural_ql
+python train.py --epochs 100 --batch_size 32
+```
+
+### 评估模型
+```bash
+python evaluate.py --visualize
+```
+
+### 人类数据放置
+将人类被试CSV数据放在 `results/` 目录下，模型会自动加载。
+
 ## Recent Changes
+- 2025-12-01: 添加神经网络增强Q-Learning系统
+  - LSTM + Self-Attention 架构
+  - 行为克隆训练从人类数据学习
+  - 验证准确率达 86.30%
+  - 集成到 RL Dashboard
+
 - 2025-11-27: 添加RL系统
   - 创建 rl_api.php API端点
   - 创建 rl_dashboard.html 控制面板
