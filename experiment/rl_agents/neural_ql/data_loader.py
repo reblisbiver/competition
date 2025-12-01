@@ -3,10 +3,9 @@
 Human Behavioral Data Loader
 Loads and preprocesses human subject data for neural network training.
 
-Data format expected:
-- CSV files with columns: trial_number, time, schedule_type, schedule_name, 
-  is_biased_choice, side_choice, RT, observed_reward, unobserved_reward, 
-  biased_reward, unbiased_reward
+Supports two data formats:
+1. Original format: side_choice (LEFT/RIGHT), observed_reward
+2. Competition format: is_choice_alternative_1 (true/false), reward_alternative_1, reward_alternative_2
 """
 import os
 import glob
@@ -22,6 +21,21 @@ class HumanDataLoader:
         self.sequence_length = sequence_length
         self.action_map = {"LEFT": 0, "RIGHT": 1}
         self.reverse_action_map = {0: "LEFT", 1: "RIGHT"}
+    
+    def _convert_competition_format(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Convert competition format to standard format."""
+        df = df.copy()
+        df.columns = df.columns.str.strip()
+        
+        choice_col = df['is_choice_alternative_1'].astype(str).str.strip().str.lower()
+        df['side_choice'] = choice_col.apply(lambda x: 'LEFT' if x == 'true' else 'RIGHT')
+        
+        df['observed_reward'] = df.apply(
+            lambda row: row['reward_alternative_1'] if str(row['is_choice_alternative_1']).strip().lower() == 'true' 
+            else row['reward_alternative_2'], axis=1
+        )
+        
+        return df
         
     def load_all_human_data(self, data_dir: Optional[str] = None) -> List[pd.DataFrame]:
         """Load all CSV files from human data directories."""
@@ -35,11 +49,16 @@ class HumanDataLoader:
             try:
                 df = pd.read_csv(csv_file)
                 df.columns = df.columns.str.strip()
-                if 'side_choice' in df.columns and len(df) >= 5:
+                
+                if 'is_choice_alternative_1' in df.columns and len(df) >= 5:
+                    df = self._convert_competition_format(df)
+                    df['source_file'] = csv_file
+                    all_data.append(df)
+                elif 'side_choice' in df.columns and len(df) >= 5:
                     df['source_file'] = csv_file
                     all_data.append(df)
             except Exception as e:
-                print(f"Warning: Could not load {csv_file}: {e}")
+                pass
                 
         return all_data
     
