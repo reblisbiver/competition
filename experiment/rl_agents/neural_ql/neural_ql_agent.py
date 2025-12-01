@@ -59,14 +59,8 @@ def load_model():
     return model, seq_length
 
 
-def load_agent_state(user_id: str) -> dict:
-    """Load agent state for a user."""
-    state_path = os.path.join(STATE_DIR, f"state_{user_id}.json")
-    
-    if os.path.exists(state_path):
-        with open(state_path, 'r') as f:
-            return json.load(f)
-            
+def get_fresh_state() -> dict:
+    """Get a fresh/empty agent state."""
     return {
         'actions': [],
         'rewards': [],
@@ -77,6 +71,36 @@ def load_agent_state(user_id: str) -> dict:
         'right_reward': 0.0,
         'total_reward': 0.0
     }
+
+def load_agent_state(user_id: str, reset: bool = False) -> dict:
+    """Load agent state for a user."""
+    state_path = os.path.join(STATE_DIR, f"state_{user_id}.json")
+    
+    if reset:
+        if os.path.exists(state_path):
+            os.remove(state_path)
+        return get_fresh_state()
+    
+    if os.path.exists(state_path):
+        with open(state_path, 'r') as f:
+            return json.load(f)
+            
+    return get_fresh_state()
+
+def cleanup_old_states(max_age_hours: int = 24):
+    """Clean up state files older than max_age_hours."""
+    import time
+    now = time.time()
+    max_age_seconds = max_age_hours * 3600
+    
+    for filename in os.listdir(STATE_DIR):
+        if filename.startswith('state_') and filename.endswith('.json'):
+            filepath = os.path.join(STATE_DIR, filename)
+            try:
+                if now - os.path.getmtime(filepath) > max_age_seconds:
+                    os.remove(filepath)
+            except:
+                pass
 
 
 def save_agent_state(user_id: str, state: dict):
@@ -185,8 +209,13 @@ def main():
         last_reward = float(sys.argv[3]) if sys.argv[3] not in ["None", "null", ""] else 0.0
     except:
         last_reward = 0.0
-        
-    state = load_agent_state(user_id)
+    
+    import random
+    if random.random() < 0.01:
+        cleanup_old_states(max_age_hours=24)
+    
+    reset_session = (last_action is None and last_reward == 0.0)
+    state = load_agent_state(user_id, reset=reset_session)
     
     if last_action is not None:
         state = update_state(state, last_action, last_reward)

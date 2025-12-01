@@ -46,11 +46,26 @@ class HumanDataLoader:
     def preprocess_session(self, df: pd.DataFrame) -> Dict:
         """Preprocess a single session into features and labels."""
         df = df.copy()
+        df.columns = df.columns.str.strip()
+        df['side_choice'] = df['side_choice'].astype(str).str.strip()
         df['action'] = df['side_choice'].map(self.action_map)
+        invalid_mask = df['action'].isna()
+        if invalid_mask.any():
+            df = df[~invalid_mask].reset_index(drop=True)
+        df['action'] = df['action'].astype(int)
         df['reward'] = df['observed_reward'].astype(float)
         
         if 'RT' in df.columns:
-            df['rt_normalized'] = (df['RT'] - df['RT'].mean()) / (df['RT'].std() + 1e-8)
+            try:
+                rt_values = pd.to_numeric(df['RT'], errors='coerce')
+                rt_mean = rt_values.mean()
+                rt_std = rt_values.std()
+                if pd.isna(rt_mean) or rt_std == 0:
+                    df['rt_normalized'] = 0.0
+                else:
+                    df['rt_normalized'] = (rt_values - rt_mean) / (rt_std + 1e-8)
+            except:
+                df['rt_normalized'] = 0.0
         else:
             df['rt_normalized'] = 0.0
             
@@ -152,10 +167,11 @@ class HumanDataLoader:
         all_rewards = []
         for df in all_sessions:
             df.columns = df.columns.str.strip()
-            all_actions.extend(df['side_choice'].values)
+            actions = df['side_choice'].astype(str).str.strip().values
+            all_actions.extend(actions)
             all_rewards.extend(df['observed_reward'].values)
             
-        left_rate = sum(1 for a in all_actions if a == 'LEFT') / len(all_actions) if all_actions else 0
+        left_rate = sum(1 for a in all_actions if a.strip() == 'LEFT') / len(all_actions) if all_actions else 0
         avg_reward = np.mean(all_rewards) if all_rewards else 0
         
         return {
