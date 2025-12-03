@@ -54,6 +54,36 @@ curl "/rl_api.php?action=list_schedules"
 - **random_agent** - 随机选择 (基线)
 - **ucb_agent** - Upper Confidence Bound
 - **neural_ql** - 神经网络增强Q-Learning (LSTM + Attention，从人类数据训练)
+- **neural_ql_fast** - 快速规则模型 (45x faster, 基于人类行为规则)
+
+## 模型评估系统
+
+### 访问评估控制面板
+- `/evaluate_dashboard.html` - 可视化评估界面
+
+### 评估 API
+```
+GET /evaluate_api.php?models=<model>&runs=<n>&sample=<n>
+```
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| models | fast/neural/all | all |
+| runs | 随机模型运行次数 | 5 |
+| sample | 样本数量 (0=全部) | 0 |
+
+### 命令行评估
+```bash
+cd experiment/rl_agents/neural_ql
+source /home/runner/workspace/.venv/bin/activate
+python evaluate_all.py --model all --runs 1
+```
+
+### 当前模型准确率
+| 模型 | 准确率 | 说明 |
+|------|--------|------|
+| Neural Network | 74.91% | LSTM + Attention |
+| Fast Rules | 55.40% | 4条概率规则 |
 
 ### 添加新RL模型
 1. 在 `experiment/rl_agents/models/` 创建Python脚本

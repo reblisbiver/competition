@@ -274,6 +274,7 @@ def main():
     parser.add_argument("--verbose", action="store_true", help="Verbose output")
     parser.add_argument("--runs", type=int, default=5, help="Number of runs for stochastic models")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    parser.add_argument("--sample", type=int, default=0, help="Sample size (0 = all sessions)")
     
     args = parser.parse_args()
     
@@ -298,7 +299,13 @@ def main():
         if len(session_data['actions']) > 0:
             sessions.append(session_data)
     
-    print(f"Loaded {len(sessions)} valid sessions")
+    if args.sample > 0 and args.sample < len(sessions):
+        random.shuffle(sessions)
+        sessions = sessions[:args.sample]
+        print(f"Sampled {len(sessions)} sessions")
+    else:
+        print(f"Loaded {len(sessions)} valid sessions")
+    
     total_trials = sum(len(s['actions']) for s in sessions)
     print(f"Total trials: {total_trials}")
     

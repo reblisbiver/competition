@@ -1,0 +1,516 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Model Evaluation Dashboard</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2rem;
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .dashboard {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        @media (max-width: 800px) {
+            .dashboard {
+                grid-template-columns: 1fr;
+            }
+        }
+        .card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 16px;
+            padding: 24px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .card h2 {
+            font-size: 1.2rem;
+            margin-bottom: 20px;
+            color: #00d9ff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .model-select {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .model-option {
+            display: flex;
+            align-items: center;
+            padding: 16px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+        .model-option:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        .model-option.selected {
+            border-color: #00d9ff;
+            background: rgba(0,217,255,0.1);
+        }
+        .model-option input {
+            display: none;
+        }
+        .model-info {
+            flex: 1;
+            margin-left: 12px;
+        }
+        .model-name {
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+        .model-desc {
+            font-size: 0.85rem;
+            color: #888;
+            margin-top: 4px;
+        }
+        .model-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+        .btn {
+            width: 100%;
+            padding: 16px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 20px;
+        }
+        .btn-primary {
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            color: #1a1a2e;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 30px rgba(0,217,255,0.3);
+        }
+        .btn-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .results-container {
+            grid-column: 1 / -1;
+        }
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .result-card {
+            background: rgba(255,255,255,0.05);
+            border-radius: 12px;
+            padding: 20px;
+            text-align: center;
+        }
+        .result-value {
+            font-size: 2.5rem;
+            font-weight: 700;
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .result-label {
+            font-size: 0.9rem;
+            color: #888;
+            margin-top: 8px;
+        }
+        .comparison-bar {
+            height: 40px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 20px;
+            overflow: hidden;
+            position: relative;
+            margin: 20px 0;
+        }
+        .bar-fill {
+            height: 100%;
+            border-radius: 20px;
+            transition: width 1s ease;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 12px;
+            font-weight: 600;
+        }
+        .bar-neural {
+            background: linear-gradient(90deg, #00d9ff, #0099cc);
+        }
+        .bar-fast {
+            background: linear-gradient(90deg, #00ff88, #00cc6a);
+        }
+        .bar-label {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-weight: 600;
+            z-index: 1;
+        }
+        .progress-container {
+            margin-top: 20px;
+            display: none;
+        }
+        .progress-bar {
+            height: 8px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+            border-radius: 4px;
+            transition: width 0.3s;
+            width: 0%;
+        }
+        .progress-text {
+            text-align: center;
+            margin-top: 10px;
+            color: #888;
+        }
+        .log-container {
+            background: #0d0d1a;
+            border-radius: 12px;
+            padding: 16px;
+            max-height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.85rem;
+            margin-top: 20px;
+        }
+        .log-entry {
+            padding: 4px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .log-time {
+            color: #666;
+        }
+        .log-info {
+            color: #00d9ff;
+        }
+        .log-success {
+            color: #00ff88;
+        }
+        .log-error {
+            color: #ff6b6b;
+        }
+        .params-info {
+            background: rgba(0,0,0,0.3);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 16px;
+            font-size: 0.85rem;
+        }
+        .params-info code {
+            color: #00ff88;
+        }
+        .hidden {
+            display: none !important;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+        }
+        .status-running {
+            background: rgba(255,193,7,0.2);
+            color: #ffc107;
+        }
+        .status-complete {
+            background: rgba(0,255,136,0.2);
+            color: #00ff88;
+        }
+        .status-error {
+            background: rgba(255,107,107,0.2);
+            color: #ff6b6b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Model Evaluation Dashboard</h1>
+        
+        <div class="dashboard">
+            <div class="card">
+                <h2>🤖 Select Models to Evaluate</h2>
+                <div class="model-select">
+                    <label class="model-option selected" data-model="neural">
+                        <input type="checkbox" name="model" value="neural" checked>
+                        <div class="model-icon" style="background: linear-gradient(135deg, #00d9ff, #0066cc);">🧠</div>
+                        <div class="model-info">
+                            <div class="model-name">Neural Network Model</div>
+                            <div class="model-desc">LSTM + Attention, trained on human data</div>
+                        </div>
+                    </label>
+                    <label class="model-option selected" data-model="fast">
+                        <input type="checkbox" name="model" value="fast" checked>
+                        <div class="model-icon" style="background: linear-gradient(135deg, #00ff88, #00aa55);">⚡</div>
+                        <div class="model-info">
+                            <div class="model-name">Fast Rule-Based Model</div>
+                            <div class="model-desc">4 probabilistic rules, no PyTorch needed</div>
+                        </div>
+                    </label>
+                </div>
+                
+                <div class="params-info" id="fastParams">
+                    <strong>Fast Model Parameters:</strong><br>
+                    LEFT_BIAS: <code>62%</code> | 
+                    STAY_PROB: <code>66%</code><br>
+                    WIN_STAY: <code>+15%</code> | 
+                    LOSE_SHIFT: <code>-10%</code>
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>⚙️ Evaluation Settings</h2>
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; margin-bottom: 8px; color: #888;">Number of Runs (for stochastic models)</label>
+                    <select id="numRuns" style="width: 100%; padding: 12px; border-radius: 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 1rem;">
+                        <option value="1">1 run (fastest)</option>
+                        <option value="3">3 runs</option>
+                        <option value="5" selected>5 runs (recommended)</option>
+                        <option value="10">10 runs (most accurate)</option>
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 16px;">
+                    <label style="display: block; margin-bottom: 8px; color: #888;">Sample Size</label>
+                    <select id="sampleSize" style="width: 100%; padding: 12px; border-radius: 8px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); color: #fff; font-size: 1rem;">
+                        <option value="100">100 sessions (quick test)</option>
+                        <option value="500">500 sessions</option>
+                        <option value="0" selected>All sessions (full evaluation)</option>
+                    </select>
+                </div>
+                
+                <button class="btn btn-primary" id="runBtn" onclick="runEvaluation()">
+                    🚀 Run Evaluation
+                </button>
+                
+                <div class="progress-container" id="progressContainer">
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                    <div class="progress-text" id="progressText">Initializing...</div>
+                </div>
+            </div>
+            
+            <div class="card results-container hidden" id="resultsContainer">
+                <h2>📊 Evaluation Results <span class="status-badge status-complete" id="statusBadge">Complete</span></h2>
+                
+                <div class="results-grid" id="resultsGrid">
+                </div>
+                
+                <h3 style="margin: 20px 0 10px; color: #888;">Accuracy Comparison</h3>
+                <div id="comparisonBars"></div>
+                
+                <div class="log-container" id="logContainer">
+                    <div class="log-entry">
+                        <span class="log-time">[--:--:--]</span>
+                        <span class="log-info">Waiting for evaluation...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let isRunning = false;
+        let eventSource = null;
+        
+        document.querySelectorAll('.model-option').forEach(option => {
+            option.addEventListener('click', function() {
+                const checkbox = this.querySelector('input[type="checkbox"]');
+                checkbox.checked = !checkbox.checked;
+                this.classList.toggle('selected', checkbox.checked);
+            });
+        });
+        
+        function log(message, type = 'info') {
+            const container = document.getElementById('logContainer');
+            const time = new Date().toLocaleTimeString();
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            entry.innerHTML = `<span class="log-time">[${time}]</span> <span class="log-${type}">${message}</span>`;
+            container.appendChild(entry);
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function clearLog() {
+            document.getElementById('logContainer').innerHTML = '';
+        }
+        
+        function updateProgress(percent, text) {
+            document.getElementById('progressFill').style.width = percent + '%';
+            document.getElementById('progressText').textContent = text;
+        }
+        
+        function showResults(results) {
+            const container = document.getElementById('resultsContainer');
+            const grid = document.getElementById('resultsGrid');
+            const bars = document.getElementById('comparisonBars');
+            
+            container.classList.remove('hidden');
+            grid.innerHTML = '';
+            bars.innerHTML = '';
+            
+            const models = Object.keys(results);
+            const maxAcc = Math.max(...models.map(m => results[m].accuracy || 0));
+            
+            models.forEach(model => {
+                const data = results[model];
+                const acc = (data.accuracy * 100).toFixed(2);
+                const std = data.std ? (data.std * 100).toFixed(2) : '0.00';
+                
+                grid.innerHTML += `
+                    <div class="result-card">
+                        <div class="result-value">${acc}%</div>
+                        <div class="result-label">${model.charAt(0).toUpperCase() + model.slice(1)} Model</div>
+                        ${data.std > 0 ? `<div style="color: #666; font-size: 0.8rem;">± ${std}%</div>` : ''}
+                    </div>
+                `;
+                
+                const barWidth = (data.accuracy / maxAcc) * 100;
+                const barClass = model === 'neural' ? 'bar-neural' : 'bar-fast';
+                bars.innerHTML += `
+                    <div class="comparison-bar">
+                        <span class="bar-label">${model.charAt(0).toUpperCase() + model.slice(1)}</span>
+                        <div class="bar-fill ${barClass}" style="width: ${barWidth}%">${acc}%</div>
+                    </div>
+                `;
+            });
+            
+            if (results.neural && results.fast) {
+                const gap = ((results.neural.accuracy - results.fast.accuracy) * 100).toFixed(2);
+                grid.innerHTML += `
+                    <div class="result-card">
+                        <div class="result-value" style="color: ${gap > 0 ? '#00d9ff' : '#ff6b6b'}">${gap > 0 ? '+' : ''}${gap}%</div>
+                        <div class="result-label">Neural vs Fast Gap</div>
+                    </div>
+                `;
+            }
+            
+            if (results.neural) {
+                grid.innerHTML += `
+                    <div class="result-card">
+                        <div class="result-value">${results.neural.n_sessions || 'N/A'}</div>
+                        <div class="result-label">Sessions Evaluated</div>
+                    </div>
+                `;
+            }
+        }
+        
+        async function runEvaluation() {
+            if (isRunning) return;
+            
+            const selectedModels = [];
+            document.querySelectorAll('input[name="model"]:checked').forEach(cb => {
+                selectedModels.push(cb.value);
+            });
+            
+            if (selectedModels.length === 0) {
+                alert('Please select at least one model to evaluate.');
+                return;
+            }
+            
+            isRunning = true;
+            const btn = document.getElementById('runBtn');
+            btn.disabled = true;
+            btn.textContent = '⏳ Running...';
+            
+            document.getElementById('progressContainer').style.display = 'block';
+            document.getElementById('resultsContainer').classList.remove('hidden');
+            document.getElementById('statusBadge').className = 'status-badge status-running';
+            document.getElementById('statusBadge').textContent = 'Running...';
+            
+            clearLog();
+            log('Starting evaluation...', 'info');
+            
+            const numRuns = document.getElementById('numRuns').value;
+            const sampleSize = document.getElementById('sampleSize').value;
+            
+            const modelParam = selectedModels.length === 2 ? 'all' : selectedModels[0];
+            
+            try {
+                log(`Models: ${selectedModels.join(', ')}`, 'info');
+                log(`Runs: ${numRuns}, Sample: ${sampleSize === '0' ? 'All' : sampleSize}`, 'info');
+                
+                updateProgress(10, 'Loading human data...');
+                
+                const url = `evaluate_api.php?models=${modelParam}&runs=${numRuns}&sample=${sampleSize}`;
+                log(`Calling API: ${url}`, 'info');
+                
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                if (data.success) {
+                    updateProgress(100, 'Complete!');
+                    log(`Evaluation completed successfully!`, 'success');
+                    
+                    if (data.data.fast) {
+                        log(`Fast Model: ${(data.data.fast.accuracy * 100).toFixed(2)}%`, 'success');
+                    }
+                    if (data.data.neural) {
+                        log(`Neural Model: ${(data.data.neural.accuracy * 100).toFixed(2)}%`, 'success');
+                    }
+                    
+                    showResults(data.data);
+                    
+                    document.getElementById('statusBadge').className = 'status-badge status-complete';
+                    document.getElementById('statusBadge').textContent = 'Complete';
+                } else {
+                    throw new Error(data.error || 'Unknown error');
+                }
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+                updateProgress(0, 'Failed');
+                
+                document.getElementById('statusBadge').className = 'status-badge status-error';
+                document.getElementById('statusBadge').textContent = 'Error';
+            } finally {
+                isRunning = false;
+                btn.disabled = false;
+                btn.textContent = '🚀 Run Evaluation';
+            }
+        }
+    </script>
+</body>
+</html>
