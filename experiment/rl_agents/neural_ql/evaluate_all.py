@@ -36,6 +36,17 @@ FAST_PARAMS = {
     'PHASE_BOOST': 0.10,
 }
 
+RULE_ENABLED = {
+    'LEFT_BIAS': True,
+    'BASE_STAY': True,
+    'WIN_STAY': True,
+    'LOSE_SHIFT': False,
+    'STREAK_WIN': True,
+    'MOMENTUM': True,
+    'RECENCY': True,
+    'PHASE': True,
+}
+
 
 class FastModel:
     """Enhanced rule-based fast model v2 with 8 behavioral rules."""
@@ -58,32 +69,41 @@ class FastModel:
     def predict(self, history: Dict = None) -> int:
         """Predict next action. Returns 0=LEFT, 1=RIGHT."""
         if self.trial == 0 or self.last_action is None:
-            return 0 if random.random() < FAST_PARAMS['LEFT_BIAS'] else 1
+            if RULE_ENABLED.get('LEFT_BIAS', True):
+                return 0 if random.random() < FAST_PARAMS['LEFT_BIAS'] else 1
+            else:
+                return 0 if random.random() < 0.5 else 1
         
-        stay_prob = FAST_PARAMS['BASE_STAY']
-        
-        if self.last_reward == 1:
-            stay_prob += FAST_PARAMS['WIN_STAY_BOOST']
+        if RULE_ENABLED.get('BASE_STAY', True):
+            stay_prob = FAST_PARAMS['BASE_STAY']
         else:
+            stay_prob = 0.5
+        
+        if RULE_ENABLED.get('WIN_STAY', True) and self.last_reward == 1:
+            stay_prob += FAST_PARAMS['WIN_STAY_BOOST']
+        
+        if RULE_ENABLED.get('LOSE_SHIFT', False) and self.last_reward == 0:
             stay_prob -= FAST_PARAMS['LOSE_SHIFT_BOOST']
         
-        if self.win_streak >= 2:
+        if RULE_ENABLED.get('STREAK_WIN', True) and self.win_streak >= 2:
             stay_prob += FAST_PARAMS['STREAK_WIN_BOOST'] * min(self.win_streak - 1, 3)
         
-        if self.prev_stayed is not None:
+        if RULE_ENABLED.get('MOMENTUM', True) and self.prev_stayed is not None:
             if self.prev_stayed:
                 stay_prob += FAST_PARAMS['MOMENTUM_BOOST']
             else:
                 stay_prob -= FAST_PARAMS['MOMENTUM_BOOST']
         
-        window = 5
-        if len(self.reward_history) >= window:
-            recent_rate = sum(self.reward_history[-window:]) / window
-            stay_prob += (recent_rate - 0.5) * FAST_PARAMS['RECENCY_WEIGHT'] * 2
+        if RULE_ENABLED.get('RECENCY', True):
+            window = 5
+            if len(self.reward_history) >= window:
+                recent_rate = sum(self.reward_history[-window:]) / window
+                stay_prob += (recent_rate - 0.5) * FAST_PARAMS['RECENCY_WEIGHT'] * 2
         
-        progress = self.trial / 100
-        if progress > 0.67:
-            stay_prob += FAST_PARAMS['PHASE_BOOST']
+        if RULE_ENABLED.get('PHASE', True):
+            progress = self.trial / 100
+            if progress > 0.67:
+                stay_prob += FAST_PARAMS['PHASE_BOOST']
         
         stay_prob = max(0.05, min(0.95, stay_prob))
         
@@ -292,6 +312,8 @@ def evaluate_model(model, sessions: List, model_name: str, n_runs: int = 1, verb
 
 
 def main():
+    global RULE_ENABLED
+    
     parser = argparse.ArgumentParser(description="Universal Model Evaluation")
     parser.add_argument("--model", type=str, default="all", 
                         choices=["neural", "fast", "all"],
@@ -301,8 +323,19 @@ def main():
     parser.add_argument("--runs", type=int, default=5, help="Number of runs for stochastic models")
     parser.add_argument("--seed", type=int, default=42, help="Random seed")
     parser.add_argument("--sample", type=int, default=0, help="Sample size (0 = all sessions)")
+    parser.add_argument("--rules", type=str, default=None, 
+                        help="JSON string to enable/disable rules, e.g., '{\"LEFT_BIAS\":1,\"MOMENTUM\":0}'")
     
     args = parser.parse_args()
+    
+    if args.rules:
+        try:
+            rules_config = json.loads(args.rules)
+            for rule_name, enabled in rules_config.items():
+                if rule_name in RULE_ENABLED:
+                    RULE_ENABLED[rule_name] = bool(enabled)
+        except json.JSONDecodeError as e:
+            print(f"Warning: Could not parse rules JSON: {e}")
     
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -340,10 +373,11 @@ def main():
     if args.model in ["fast", "all"]:
         print("\n" + "-" * 40)
         print("Evaluating Fast Model...")
-        print(f"  Rules: LEFT_BIAS={FAST_PARAMS['LEFT_BIAS']:.0%}, "
-              f"BASE_STAY={FAST_PARAMS['BASE_STAY']:.0%}, "
-              f"WIN_STAY=+{FAST_PARAMS['WIN_STAY_BOOST']:.0%}, "
-              f"MOMENTUM=+{FAST_PARAMS['MOMENTUM_BOOST']:.0%}")
+        enabled_rules = [r for r, e in RULE_ENABLED.items() if e]
+        disabled_rules = [r for r, e in RULE_ENABLED.items() if not e]
+        print(f"  Enabled rules ({len(enabled_rules)}/8): {', '.join(enabled_rules)}")
+        if disabled_rules:
+            print(f"  Disabled rules: {', '.join(disabled_rules)}")
         
         fast_model = FastModel()
         fast_results = evaluate_model(

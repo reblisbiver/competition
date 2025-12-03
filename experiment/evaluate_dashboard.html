@@ -263,6 +263,113 @@
             background: rgba(255,107,107,0.2);
             color: #ff6b6b;
         }
+        .rules-container {
+            background: rgba(0,0,0,0.3);
+            border-radius: 12px;
+            padding: 16px;
+            margin-top: 16px;
+        }
+        .rules-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        .rule-toggle {
+            display: flex;
+            align-items: center;
+            padding: 8px 12px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+            gap: 8px;
+        }
+        .rule-toggle:hover {
+            background: rgba(255,255,255,0.1);
+        }
+        .rule-toggle input {
+            display: none;
+        }
+        .toggle-slider {
+            width: 36px;
+            height: 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 10px;
+            position: relative;
+            transition: background 0.3s;
+            flex-shrink: 0;
+        }
+        .toggle-slider::after {
+            content: '';
+            position: absolute;
+            width: 16px;
+            height: 16px;
+            background: white;
+            border-radius: 50%;
+            top: 2px;
+            left: 2px;
+            transition: transform 0.3s;
+        }
+        .rule-toggle input:checked + .toggle-slider {
+            background: linear-gradient(90deg, #00d9ff, #00ff88);
+        }
+        .rule-toggle input:checked + .toggle-slider::after {
+            transform: translateX(16px);
+        }
+        .rule-name {
+            font-weight: 600;
+            font-size: 0.85rem;
+            flex: 1;
+        }
+        .rule-value {
+            font-size: 0.75rem;
+            color: #00ff88;
+            font-family: monospace;
+        }
+        .rules-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        .btn-small {
+            padding: 6px 12px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            transition: all 0.2s;
+        }
+        .btn-small:hover {
+            background: rgba(255,255,255,0.2);
+        }
+        .btn-reset {
+            background: rgba(0,217,255,0.2);
+            color: #00d9ff;
+        }
+        .contribution-card {
+            background: rgba(255,255,255,0.03);
+            border-radius: 8px;
+            padding: 12px;
+            margin-top: 8px;
+        }
+        .contribution-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+        }
+        .contribution-row:last-child {
+            border-bottom: none;
+        }
+        .contribution-positive {
+            color: #00ff88;
+        }
+        .contribution-negative {
+            color: #ff6b6b;
+        }
     </style>
 </head>
 <body>
@@ -285,18 +392,69 @@
                         <input type="checkbox" name="model" value="fast" checked>
                         <div class="model-icon" style="background: linear-gradient(135deg, #00ff88, #00aa55);">⚡</div>
                         <div class="model-info">
-                            <div class="model-name">Fast Rule-Based Model</div>
-                            <div class="model-desc">4 probabilistic rules, no PyTorch needed</div>
+                            <div class="model-name">Fast Rule-Based Model v2</div>
+                            <div class="model-desc">8 behavioral rules, toggle each below</div>
                         </div>
                     </label>
                 </div>
                 
-                <div class="params-info" id="fastParams">
-                    <strong>Fast Model Parameters:</strong><br>
-                    LEFT_BIAS: <code>62%</code> | 
-                    STAY_PROB: <code>66%</code><br>
-                    WIN_STAY: <code>+15%</code> | 
-                    LOSE_SHIFT: <code>-10%</code>
+                <div class="rules-container" id="rulesContainer">
+                    <strong style="display: block; margin-bottom: 12px;">Fast Model Rules (Toggle to enable/disable):</strong>
+                    <div class="rules-grid">
+                        <label class="rule-toggle" data-rule="LEFT_BIAS">
+                            <input type="checkbox" checked>
+                            <span class="toggle-slider"></span>
+                            <span class="rule-name">LEFT_BIAS</span>
+                            <span class="rule-value">62%</span>
+                        </label>
+                        <label class="rule-toggle" data-rule="BASE_STAY">
+                            <input type="checkbox" checked>
+                            <span class="toggle-slider"></span>
+                            <span class="rule-name">BASE_STAY</span>
+                            <span class="rule-value">66%</span>
+                        </label>
+                        <label class="rule-toggle" data-rule="WIN_STAY">
+                            <input type="checkbox" checked>
+                            <span class="toggle-slider"></span>
+                            <span class="rule-name">WIN_STAY</span>
+                            <span class="rule-value">+15%</span>
+                        </label>
+                        <label class="rule-toggle" data-rule="LOSE_SHIFT">
+                            <input type="checkbox">
+                            <span class="toggle-slider"></span>
+                            <span class="rule-name">LOSE_SHIFT</span>
+                            <span class="rule-value">0%</span>
+                        </label>
+                        <label class="rule-toggle" data-rule="STREAK_WIN">
+                            <input type="checkbox" checked>
+                            <span class="toggle-slider"></span>
+                            <span class="rule-name">STREAK_WIN</span>
+                            <span class="rule-value">+5%</span>
+                        </label>
+                        <label class="rule-toggle" data-rule="MOMENTUM">
+                            <input type="checkbox" checked>
+                            <span class="toggle-slider"></span>
+                            <span class="rule-name">MOMENTUM</span>
+                            <span class="rule-value">+20%</span>
+                        </label>
+                        <label class="rule-toggle" data-rule="RECENCY">
+                            <input type="checkbox" checked>
+                            <span class="toggle-slider"></span>
+                            <span class="rule-name">RECENCY</span>
+                            <span class="rule-value">5%</span>
+                        </label>
+                        <label class="rule-toggle" data-rule="PHASE">
+                            <input type="checkbox" checked>
+                            <span class="toggle-slider"></span>
+                            <span class="rule-name">PHASE</span>
+                            <span class="rule-value">+10%</span>
+                        </label>
+                    </div>
+                    <div class="rules-actions">
+                        <button class="btn-small" onclick="toggleAllRules(true)">Enable All</button>
+                        <button class="btn-small" onclick="toggleAllRules(false)">Disable All</button>
+                        <button class="btn-small btn-reset" onclick="resetRules()">Reset Default</button>
+                    </div>
                 </div>
             </div>
             
@@ -356,6 +514,17 @@
         let isRunning = false;
         let eventSource = null;
         
+        const DEFAULT_RULES = {
+            LEFT_BIAS: true,
+            BASE_STAY: true,
+            WIN_STAY: true,
+            LOSE_SHIFT: false,
+            STREAK_WIN: true,
+            MOMENTUM: true,
+            RECENCY: true,
+            PHASE: true
+        };
+        
         document.querySelectorAll('.model-option').forEach(option => {
             option.addEventListener('click', function() {
                 const checkbox = this.querySelector('input[type="checkbox"]');
@@ -363,6 +532,30 @@
                 this.classList.toggle('selected', checkbox.checked);
             });
         });
+        
+        function getEnabledRules() {
+            const rules = {};
+            document.querySelectorAll('.rule-toggle').forEach(toggle => {
+                const ruleName = toggle.dataset.rule;
+                const checkbox = toggle.querySelector('input[type="checkbox"]');
+                rules[ruleName] = checkbox.checked ? 1 : 0;
+            });
+            return rules;
+        }
+        
+        function toggleAllRules(enabled) {
+            document.querySelectorAll('.rule-toggle input[type="checkbox"]').forEach(cb => {
+                cb.checked = enabled;
+            });
+        }
+        
+        function resetRules() {
+            document.querySelectorAll('.rule-toggle').forEach(toggle => {
+                const ruleName = toggle.dataset.rule;
+                const checkbox = toggle.querySelector('input[type="checkbox"]');
+                checkbox.checked = DEFAULT_RULES[ruleName];
+            });
+        }
         
         function log(message, type = 'info') {
             const container = document.getElementById('logContainer');
@@ -468,14 +661,19 @@
             const sampleSize = document.getElementById('sampleSize').value;
             
             const modelParam = selectedModels.length === 2 ? 'all' : selectedModels[0];
+            const enabledRules = getEnabledRules();
             
             try {
                 log(`Models: ${selectedModels.join(', ')}`, 'info');
                 log(`Runs: ${numRuns}, Sample: ${sampleSize === '0' ? 'All' : sampleSize}`, 'info');
                 
+                const enabledCount = Object.values(enabledRules).filter(v => v === 1).length;
+                log(`Rules enabled: ${enabledCount}/8`, 'info');
+                
                 updateProgress(10, 'Loading human data...');
                 
-                const url = `evaluate_api.php?models=${modelParam}&runs=${numRuns}&sample=${sampleSize}`;
+                const rulesParam = encodeURIComponent(JSON.stringify(enabledRules));
+                const url = `evaluate_api.php?models=${modelParam}&runs=${numRuns}&sample=${sampleSize}&rules=${rulesParam}`;
                 log(`Calling API: ${url}`, 'info');
                 
                 const response = await fetch(url);

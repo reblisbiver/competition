@@ -13,9 +13,18 @@ if (!file_exists($VENV_PYTHON)) {
 $models = $_GET['models'] ?? 'all';
 $runs = intval($_GET['runs'] ?? 5);
 $sample = intval($_GET['sample'] ?? 0);
+$rulesJson = $_GET['rules'] ?? '';
 
 $runs = max(1, min(10, $runs));
 $sample = max(0, min(1500, $sample));
+
+$rules = [];
+if ($rulesJson) {
+    $decoded = json_decode($rulesJson, true);
+    if (is_array($decoded)) {
+        $rules = $decoded;
+    }
+}
 
 $scriptDir = __DIR__ . '/rl_agents/neural_ql';
 $evalScript = $scriptDir . '/evaluate_all.py';
@@ -33,6 +42,10 @@ $cmd = "cd " . escapeshellarg($scriptDir) . " && " .
 
 if ($sample > 0) {
     $cmd .= " --sample " . escapeshellarg($sample);
+}
+
+if (!empty($rules)) {
+    $cmd .= " --rules " . escapeshellarg(json_encode($rules));
 }
 
 $cmd .= " 2>&1";
