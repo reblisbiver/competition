@@ -83,7 +83,25 @@ python evaluate_all.py --model all --runs 1
 | 模型 | 准确率 | 说明 |
 |------|--------|------|
 | Neural Network | 74.91% | LSTM + Attention |
-| Fast Rules | 55.40% | 4条概率规则 |
+| Fast Rules v2 | 64.30% | 8条行为规则 (优化后) |
+
+### Fast Model v2 规则贡献率
+| 规则 | 参数 | 贡献率 | 心理学原理 |
+|------|------|--------|-----------|
+| MOMENTUM | +20% | +4.95% | 行为惯性 |
+| BASE_STAY | 66% | +2.68% | 基础一致性 |
+| WIN_STAY | +15% | +0.80% | 热手效应 |
+| PHASE | +10% (晚期) | +0.38% | 策略固化 |
+| LEFT_BIAS | 62% | -0.13% | 左侧偏好 |
+| STREAK_WIN | +5%/连胜 | -0.32% | 连胜信心 |
+| RECENCY | 5% | -0.75% | 近因效应 |
+| LOSE_SHIFT | 0% | - | (已禁用) |
+
+### 消融实验
+```bash
+cd experiment/rl_agents/neural_ql
+python ablation_study.py --runs 3 --sample 500
+```
 
 ### 添加新RL模型
 1. 在 `experiment/rl_agents/models/` 创建Python脚本
