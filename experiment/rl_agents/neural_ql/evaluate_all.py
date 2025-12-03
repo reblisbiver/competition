@@ -27,14 +27,18 @@ from data_loader import HumanDataLoader
 
 FAST_PARAMS = {
     'LEFT_BIAS': 0.62,
-    'STAY_PROB': 0.66,
+    'BASE_STAY': 0.66,
     'WIN_STAY_BOOST': 0.15,
-    'LOSE_SHIFT_BOOST': 0.10
+    'LOSE_SHIFT_BOOST': 0.00,
+    'STREAK_WIN_BOOST': 0.05,
+    'MOMENTUM_BOOST': 0.20,
+    'RECENCY_WEIGHT': 0.05,
+    'PHASE_BOOST': 0.10,
 }
 
 
 class FastModel:
-    """Rule-based fast model."""
+    """Enhanced rule-based fast model v2 with 8 behavioral rules."""
     
     def __init__(self):
         self.reset()
@@ -42,36 +46,46 @@ class FastModel:
     def reset(self):
         self.last_action = None
         self.last_reward = None
+        self.prev_stayed = None
         self.left_rewards = 0
         self.right_rewards = 0
         self.left_count = 0
         self.right_count = 0
         self.trial = 0
+        self.reward_history = []
+        self.win_streak = 0
     
     def predict(self, history: Dict = None) -> int:
         """Predict next action. Returns 0=LEFT, 1=RIGHT."""
         if self.trial == 0 or self.last_action is None:
             return 0 if random.random() < FAST_PARAMS['LEFT_BIAS'] else 1
         
-        stay_prob = FAST_PARAMS['STAY_PROB']
+        stay_prob = FAST_PARAMS['BASE_STAY']
         
         if self.last_reward == 1:
             stay_prob += FAST_PARAMS['WIN_STAY_BOOST']
         else:
             stay_prob -= FAST_PARAMS['LOSE_SHIFT_BOOST']
         
-        left_count = max(self.left_count, 1)
-        right_count = max(self.right_count, 1)
-        left_rate = self.left_rewards / left_count
-        right_rate = self.right_rewards / right_count
+        if self.win_streak >= 2:
+            stay_prob += FAST_PARAMS['STREAK_WIN_BOOST'] * min(self.win_streak - 1, 3)
         
-        if abs(left_rate - right_rate) > 0.1:
-            if left_rate > right_rate:
-                stay_prob = stay_prob if self.last_action == 0 else (1 - stay_prob)
+        if self.prev_stayed is not None:
+            if self.prev_stayed:
+                stay_prob += FAST_PARAMS['MOMENTUM_BOOST']
             else:
-                stay_prob = stay_prob if self.last_action == 1 else (1 - stay_prob)
+                stay_prob -= FAST_PARAMS['MOMENTUM_BOOST']
         
-        stay_prob = max(0.1, min(0.9, stay_prob))
+        window = 5
+        if len(self.reward_history) >= window:
+            recent_rate = sum(self.reward_history[-window:]) / window
+            stay_prob += (recent_rate - 0.5) * FAST_PARAMS['RECENCY_WEIGHT'] * 2
+        
+        progress = self.trial / 100
+        if progress > 0.67:
+            stay_prob += FAST_PARAMS['PHASE_BOOST']
+        
+        stay_prob = max(0.05, min(0.95, stay_prob))
         
         if random.random() < stay_prob:
             return self.last_action
@@ -80,8 +94,20 @@ class FastModel:
     
     def update(self, action: int, reward: float):
         """Update state after action."""
+        if self.last_action is not None:
+            self.prev_stayed = (action == self.last_action)
+        
+        if reward == 1:
+            if self.last_reward == 1:
+                self.win_streak += 1
+            else:
+                self.win_streak = 1
+        else:
+            self.win_streak = 0
+        
         self.last_action = action
         self.last_reward = reward
+        self.reward_history.append(reward)
         
         if action == 0:
             self.left_count += 1
@@ -314,10 +340,10 @@ def main():
     if args.model in ["fast", "all"]:
         print("\n" + "-" * 40)
         print("Evaluating Fast Model...")
-        print(f"  Parameters: LEFT_BIAS={FAST_PARAMS['LEFT_BIAS']:.0%}, "
-              f"STAY={FAST_PARAMS['STAY_PROB']:.0%}, "
+        print(f"  Rules: LEFT_BIAS={FAST_PARAMS['LEFT_BIAS']:.0%}, "
+              f"BASE_STAY={FAST_PARAMS['BASE_STAY']:.0%}, "
               f"WIN_STAY=+{FAST_PARAMS['WIN_STAY_BOOST']:.0%}, "
-              f"LOSE_SHIFT=-{FAST_PARAMS['LOSE_SHIFT_BOOST']:.0%}")
+              f"MOMENTUM=+{FAST_PARAMS['MOMENTUM_BOOST']:.0%}")
         
         fast_model = FastModel()
         fast_results = evaluate_model(
