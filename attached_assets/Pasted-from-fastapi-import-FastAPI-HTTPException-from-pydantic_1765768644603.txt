@@ -1,0 +1,88 @@
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+import json
+import os
+import importlib.util
+from typing import List, Optional
+
+app = FastAPI()
+
+
+class PredictRequest(BaseModel):
+    bias_rewards: List
+    unbias_rewards: List
+    is_bias_choice: List
+    model: Optional[str] = None
+    user_id: Optional[str] = None
+
+
+def load_infer_module(model_name: Optional[str] = None):
+    """Load an inference implementation based on `model_name`.
+
+    Behavior:
+    - If `model_name` corresponds to a file under `sequences/dynamic/<model>.py`, load it and expect `allocate()`.
+    - Else try to load `sequences/dynamic/lstm_dynamic.py` and use `allocate()` if present.
+    - Else fallback to `sequence_adaptive_agent.infer` and use `bilstm_infer()`.
+    - Returns a tuple `(module, mode)` where mode is 'dynamic' or 'bilstm'.
+    """
+    base = os.path.dirname(__file__)
+
+    # Strict behavior: require model_name and do NOT fallback or auto-select.
+    if not model_name:
+        raise ImportError('model name required')
+
+    dyn_dir = os.path.join(base, 'sequences', 'dynamic')
+
+    dyn_candidate = os.path.join(dyn_dir, model_name + '.py')
+    if os.path.exists(dyn_candidate):
+        spec = importlib.util.spec_from_file_location(f'sequences.dynamic.{model_name}', dyn_candidate)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        if hasattr(mod, 'allocate'):
+            return mod, 'dynamic'
+        raise ImportError(f'model {model_name} found but does not expose allocate()')
+
+    # Do NOT special-case 'bilstm' — treat all models equally.
+    # The requested model MUST correspond to a file in sequences/dynamic/<model>.py
+    # If you need to use the legacy sequence_adaptive_agent inference, wrap it
+    # in a dynamic module file (e.g., sequences/dynamic/bilstm_dynamic.py) that
+    # imports and delegates to sequence_adaptive_agent.infer. This keeps calling
+    # semantics consistent and avoids hidden special cases.
+
+    # If we reach here, the requested model does not exist
+    raise ImportError(f'model {model_name} not found')
+
+
+@app.post('/predict')
+def predict(req: PredictRequest):
+    try:
+        infer_mod, mode = load_infer_module(req.model)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'infer module load error: {e}')
+
+    try:
+        # dynamic allocate: expect allocate(bias_rewards, unbias_rewards, is_bias_choice)
+        if mode == 'dynamic' and hasattr(infer_mod, 'allocate'):
+            t, a = infer_mod.allocate(req.bias_rewards, req.unbias_rewards, req.is_bias_choice)
+            # return JSON keys expected by backend.php: 'biased' and 'unbiased'
+            return {'status': 'ok', 'biased': int(t), 'unbiased': int(a)}
+
+        # Expect dynamic module exposing allocate(); do not special-case bilstm or fallback
+        if mode != 'dynamic' or not hasattr(infer_mod, 'allocate'):
+            raise HTTPException(status_code=500, detail='inference module must be a dynamic module exposing allocate()')
+
+        t, a = infer_mod.allocate(req.bias_rewards, req.unbias_rewards, req.is_bias_choice)
+        return {'status': 'ok', 'biased': int(t), 'unbiased': int(a)}
+
+        raise HTTPException(status_code=500, detail='no valid inference function found')
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f'inference error: {e}')
+
+
+if __name__ == '__main__':
+    import uvicorn
+    # Bind to 0.0.0.0 and respect environment PORT for Replit/containers.
+    port = int(os.environ.get('PORT', 8001))
+    uvicorn.run(app, host='0.0.0.0', port=port)

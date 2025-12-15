@@ -27,47 +27,32 @@ def load_infer_module(model_name: Optional[str] = None):
     """
     base = os.path.dirname(__file__)
 
-    # If explicit dynamic model name provided, check file existence
-    if model_name:
-        dyn_candidate = os.path.join(base, 'sequences', 'dynamic',
-                                     model_name + '.py')
-        if os.path.exists(dyn_candidate):
-            spec = importlib.util.spec_from_file_location(
-                f'sequences.dynamic.{model_name}', dyn_candidate)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
-            if hasattr(mod, 'allocate'):
-                return mod, 'dynamic'
+    # Strict behavior: require model_name and do NOT fallback or auto-select.
+    if not model_name:
+        raise ImportError('model name required')
 
-    # Try generic dynamic allocator file (lstm_dynamic.py) if present
-    dyn_path = os.path.join(base, 'sequences', 'dynamic', 'lstm_dynamic.py')
-    if os.path.exists(dyn_path):
+    dyn_dir = os.path.join(base, 'sequences', 'dynamic')
+
+    dyn_candidate = os.path.join(dyn_dir, model_name + '.py')
+    if os.path.exists(dyn_candidate):
         spec = importlib.util.spec_from_file_location(
-            'sequences.dynamic.lstm_dynamic', dyn_path)
+            f'sequences.dynamic.{model_name}', dyn_candidate)
         mod = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(mod)
         if hasattr(mod, 'allocate'):
             return mod, 'dynamic'
+        raise ImportError(
+            f'model {model_name} found but does not expose allocate()')
 
-    # Fallback: sequence_adaptive_agent.infer (bilstm)
-    try:
-        import sequence_adaptive_agent.infer as infer_mod
-        if hasattr(infer_mod, 'bilstm_infer'):
-            return infer_mod, 'bilstm'
-    except Exception:
-        pass
+    # Do NOT special-case 'bilstm' — treat all models equally.
+    # The requested model MUST correspond to a file in sequences/dynamic/<model>.py
+    # If you need to use the legacy sequence_adaptive_agent inference, wrap it
+    # in a dynamic module file (e.g., sequences/dynamic/bilstm_dynamic.py) that
+    # imports and delegates to sequence_adaptive_agent.infer. This keeps calling
+    # semantics consistent and avoids hidden special cases.
 
-    # filesystem fallback for infer.py
-    candidate = os.path.join(base, 'sequence_adaptive_agent', 'infer.py')
-    if os.path.exists(candidate):
-        spec = importlib.util.spec_from_file_location(
-            'sequence_adaptive_agent.infer', candidate)
-        mod = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        if hasattr(mod, 'bilstm_infer'):
-            return mod, 'bilstm'
-
-    raise ImportError('no suitable infer/allocate module found')
+    # If we reach here, the requested model does not exist
+    raise ImportError(f'model {model_name} not found')
 
 
 @app.post('/predict')
@@ -86,31 +71,17 @@ def predict(req: PredictRequest):
             # return JSON keys expected by backend.php: 'biased' and 'unbiased'
             return {'status': 'ok', 'biased': int(t), 'unbiased': int(a)}
 
-        # bilstm inference
-        if mode == 'bilstm' and hasattr(infer_mod, 'bilstm_infer'):
-            res = infer_mod.bilstm_infer(req.bias_rewards, req.unbias_rewards,
-                                         req.is_bias_choice)
-            if not res or len(res) < 2:
-                raise ValueError('unexpected infer output')
-            return {
-                'status': 'ok',
-                'biased': int(res[0]),
-                'unbiased': int(res[1])
-            }
+        # Expect dynamic module exposing allocate(); do not special-case bilstm or fallback
+        if mode != 'dynamic' or not hasattr(infer_mod, 'allocate'):
+            raise HTTPException(
+                status_code=500,
+                detail=
+                'inference module must be a dynamic module exposing allocate()'
+            )
 
-        # As a final fallback, attempt to use allocate or bilstm_infer if present
-        if hasattr(infer_mod, 'allocate'):
-            t, a = infer_mod.allocate(req.bias_rewards, req.unbias_rewards,
-                                      req.is_bias_choice)
-            return {'status': 'ok', 'biased': int(t), 'unbiased': int(a)}
-        if hasattr(infer_mod, 'bilstm_infer'):
-            res = infer_mod.bilstm_infer(req.bias_rewards, req.unbias_rewards,
-                                         req.is_bias_choice)
-            return {
-                'status': 'ok',
-                'biased': int(res[0]),
-                'unbiased': int(res[1])
-            }
+        t, a = infer_mod.allocate(req.bias_rewards, req.unbias_rewards,
+                                  req.is_bias_choice)
+        return {'status': 'ok', 'biased': int(t), 'unbiased': int(a)}
 
         raise HTTPException(status_code=500,
                             detail='no valid inference function found')
@@ -122,4 +93,6 @@ def predict(req: PredictRequest):
 
 if __name__ == '__main__':
     import uvicorn
-    uvicorn.run(app, host='127.0.0.1', port=8001)
+    # Bind to 0.0.0.0 and respect environment PORT for Replit/containers.
+    port = int(os.environ.get('PORT', 8001))
+    uvicorn.run(app, host='0.0.0.0', port=port)
