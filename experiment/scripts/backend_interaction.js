@@ -19,12 +19,32 @@ function get_current_trial_rewards(side_chosen) {
 
 function rewards_arrived(reward) {
     show_feedback(Number(reward));
+    setTimeout(hide_feedback, FEEDBACK_TIME);
+    setTimeout(show_middle_enabler_button, FEEDBACK_TIME);
     if (trial_number == NUMBER_OF_TRIALS) {
         // 新增：调用完整数据保存接口
-        var xmlHttp = new XMLHttpRequest();
-        xmlHttp.setRequestHeader("Content-Type", "application/json");
-        xmlHttp.send(JSON.stringify({})); // 无需额外数据，通过SESSION获取积累的试次数据
-
+        // var xmlHttp = new XMLHttpRequest();
+        // xmlHttp.setRequestHeader("Content-Type", "application/json");
+        // xmlHttp.send(JSON.stringify({})); // 无需额外数据，通过SESSION获取积累的试次数据
+        // 正确的异步 POST：必须先 open() 再 setRequestHeader()/send()
+        try {
+            var xmlHttp = new XMLHttpRequest();
+            xmlHttp.open("POST", "scripts/backend.php?final_save=1", true);
+            xmlHttp.setRequestHeader("Content-Type", "application/json");
+            xmlHttp.onreadystatechange = function () {
+                // 可选：在保存失败时记录
+                if (xmlHttp.readyState == 4 && xmlHttp.status != 200) {
+                    console.error(
+                        "final_save failed",
+                        xmlHttp.status,
+                        xmlHttp.responseText,
+                    );
+                }
+            };
+            xmlHttp.send(JSON.stringify({})); // 无需额外数据，通过SESSION获取积累的试次数据
+        } catch (e) {
+            console.error("final_save xhr error", e);
+        }
         // 跳转感谢页面（原逻辑保留）
         go_to_goodbye_page();
     }

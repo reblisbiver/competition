@@ -99,52 +99,25 @@ if ($_SESSION['schedule_type'] == "DYNAMIC") { // Game is dynamic
     $arg_isbias = json_encode($_SESSION['is_bias_choice']);
     $arg_user = json_encode($_SESSION['user_id']);
 
-    // Prefer calling a persistent inference service to avoid Python startup overhead
-    // Production: use the provided Replit URL. Locally you can set this to http://127.0.0.1:8001/predict
-    $service_url = 'https://5231b921-c6e0-4070-a57a-99f8c47c409a-00-1fg3di8hyqdb7.pike.replit.dev/predict';
-    // include `model` so the service can select which model implementation to use
-    $payload = array(
-        'bias_rewards' => $_SESSION['bias_rewards'] ?? array(),
-        'unbias_rewards' => $_SESSION['unbias_rewards'] ?? array(),
-        'is_bias_choice' => $_SESSION['is_bias_choice'] ?? array(),
-        'user_id' => $_SESSION['user_id'] ?? '',
-        'model' => $_SESSION['schedule_name'] ?? ''
-    );
-    $json_payload = json_encode($payload);
-    $ch = curl_init();
-    curl_setopt($ch, CURLOPT_URL, $service_url);
-    curl_setopt($ch, CURLOPT_POST, 1);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $json_payload);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_HTTPHEADER, array('Content-Type: application/json'));
-    curl_setopt($ch, CURLOPT_TIMEOUT, 5); // short timeout; fall back if service not available
+    $run_python_command = $python_exec
+        . ' ' . escapeshellarg($script_path)
+        . ' ' . escapeshellarg($arg_bias)
+        . ' ' . escapeshellarg($arg_unbias)
+        . ' ' . escapeshellarg($arg_isbias)
+        . ' ' . escapeshellarg($arg_user);
+    exec($run_python_command . ' 2>&1', $output_lines, $return_code);
+    $result_string = count($output_lines) ? implode("\n", $output_lines) : '';
+    $result_array = array_map('trim', explode(',', $result_string));
 
-    $svc_resp = curl_exec($ch);
-    $curl_errno = curl_errno($ch);
-    $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    curl_close($ch);
+    // Debug prints to server/terminal (useful when running PHP built-in server or CLI)
+    error_log("DEBUG run_python_command: " . $run_python_command);
+    error_log("DEBUG return_code: " . intval($return_code));
+    error_log("DEBUG output_lines: " . print_r($output_lines, true));
+    error_log("DEBUG result_string: " . $result_string);
+    error_log("DEBUG result_array: " . print_r($result_array, true));
 
-    if ($svc_resp !== false && $curl_errno == 0 && $http_code >= 200 && $http_code < 300) {
-        $j = json_decode($svc_resp, true);
-        // Expect new keys ('biased'/'unbiased') or legacy keys ('target_alloc'/'anti_alloc')
-        if (is_array($j) && isset($j['biased']) && isset($j['unbiased'])) {
-            $current_biased_reward = intval($j['biased']);
-            $current_unbiased_reward = intval($j['unbiased']);
-        } elseif (is_array($j) && isset($j['target_alloc']) && isset($j['anti_alloc'])) {
-            $current_biased_reward = intval($j['target_alloc']);
-            $current_unbiased_reward = intval($j['anti_alloc']);
-        } else {
-            error_log('ERROR: inference service returned unexpected payload: ' . $svc_resp);
-            header('Content-Type: application/json', true, 502);
-            echo json_encode(array('status' => 'error', 'message' => 'Inference service returned unexpected payload', 'payload' => $svc_resp));
-            exit;
-        }
-    } else {
-        error_log('ERROR: inference service unreachable or error (errno:' . $curl_errno . ' code:' . $http_code . ')');
-        header('Content-Type: application/json', true, 502);
-        echo json_encode(array('status' => 'error', 'message' => 'Inference service unreachable', 'errno' => $curl_errno, 'http_code' => $http_code));
-        exit;
-    }
+    $current_biased_reward = (int)$result_array[0];
+    $current_unbiased_reward = (int)$result_array[1];
 }
     /////////////////////////////////////////////////////////////////////////////
     // STATIC - Allocation of rewards to next trial

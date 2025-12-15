@@ -218,8 +218,6 @@ function button_clicked() {
         show_goodbye_message();
     } else {
         hide_all_buttons();
-        setTimeout(hide_feedback, FEEDBACK_TIME);
-        setTimeout(show_middle_enabler_button, FEEDBACK_TIME);
     }
     set_counter_text(NUMBER_OF_TRIALS - trial_number - 1); //-1 because first trial is 0
     trial_number++;
