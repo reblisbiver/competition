@@ -87,49 +87,33 @@ def allocate(target_allocations, anti_target_allocations, is_target_choices):
                 and the second whether a reward should be allocated to the
                 anti-target side.
     """
-    trial = len(target_allocations)
-    # In first two trials put rewards in the target side only
-    if trial < 2:
-        return REWARD, NO_REWARD
-
-    target_alternative, anti_target_alternative = None, None
-    # If previous choice was of the target side
-    if is_target_choices[-1]:
-        # If the choice yielded a reward
-        if target_allocations[-1] == REWARD:
-            # A WSLS agent will choose this side again - so assign a reward to
-            # the target side again and also a reward to the anti-target side,
-            # since the agent will not choose it currently so it's a way to
-            # "discard" rewards on the anti-target side on unchosen trials
-            target_alternative, anti_target_alternative = REWARD, REWARD
-        else:
-            # The agent chose the target side but did not receive a reward, so
-            # the agent will switch - put no rewards on the anti-target side
-            # (so the agent won't think it is good) and no reward on the target
-            # side (not to "waste" it)
-            target_alternative, anti_target_alternative = NO_REWARD, NO_REWARD
-    # Previous choice was of the anti-target side
-    else:
-        # If the choice yielded a reward
-        if anti_target_allocations[-1] == REWARD:
-            # The agent is likely to choose the anti-target again, so don't put
-            # rewards there to discourage such choices. Also, don't put rewards
-            # on the target side so as not to waste them.
-            target_alternative, anti_target_alternative = NO_REWARD, NO_REWARD
-        # The choice did not yield a reward
-        else:
-            # The agent will switch to the target side, so put a reward there
-            # to encourage such choices. Also, put a reward on the anti-target
-            # to "waste" it.
-            target_alternative, anti_target_alternative = REWARD, REWARD
-    # We assume that in the first 15 trials, the user is somewhat
-    # likely to sample the anti-target side so we start assigning
-    # rewards to that side only after the 15th trial
-    if trial < 15:
-        anti_target_alternative = NO_REWARD
-
-    return constrain(target_allocations, target_alternative),\
-           constrain(anti_target_allocations, anti_target_alternative)
+    # Load bilstm_infer from the trained-model infer module and call it.
+    try:
+        # Try package import first
+        from sequence_adaptive_agent.infer import bilstm_infer as _bilstm_infer
+    except Exception as e:
+        # Fallback: load infer.py by filesystem path relative to this file
+        try:
+            import importlib.util, os
+            this_dir = os.path.dirname(__file__)
+            # path: experiment/sequences/dynamic/ -> go up two levels to experiment/
+            repo_experiment = os.path.abspath(os.path.join(this_dir, '..', '..'))
+            infer_path = os.path.join(repo_experiment, 'sequence_adaptive_agent', 'infer.py')
+            if not os.path.exists(infer_path):
+                raise FileNotFoundError(infer_path)
+            spec = importlib.util.spec_from_file_location('sequence_adaptive_agent.infer', infer_path)
+            mod = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(mod)
+            _bilstm_infer = getattr(mod, 'bilstm_infer')
+        except Exception as e2:
+            raise RuntimeError('Failed to import bilstm_infer from infer module: ' + str(e2))
+    try:
+        res = _bilstm_infer(target_allocations, anti_target_allocations, is_target_choices)
+    except Exception as e:
+        raise RuntimeError('bilstm_infer raised an exception: ' + str(e))
+    if res is None:
+        raise RuntimeError('bilstm_infer returned None')
+    return res
 
 
 def constrain(previous_allocation, current_allocation):

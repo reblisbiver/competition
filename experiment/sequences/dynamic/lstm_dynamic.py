@@ -65,6 +65,12 @@
 ###############################################################################
 import sys
 import ast
+import random
+import numpy as np
+import torch
+import torch.nn as nn
+from torch.distributions import Categorical
+import os
 ###############################################################################
 # Template - Insert your code here
 ###############################################################################
@@ -73,63 +79,99 @@ NUMBER_OF_TRIALS = 100
 REWARD = 1
 NO_REWARD = 0
 
+# LSTM Allocator Model
+INPUT_DIM = 5  # [prev_action_oh(2), prev_reward(1), remaining_left_norm, remaining_right_norm]
+HIDDEN_DIM = 64
+NUM_ACTIONS = 3  # 0=no,1=left_ticket,2=right_ticket
 
+
+class AllocatorPolicy(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+        self.lstm = nn.LSTM(INPUT_DIM, HIDDEN_DIM, batch_first=True)
+        self.fc = nn.Linear(HIDDEN_DIM, NUM_ACTIONS)
+
+    def forward(self, x, hx=None):
+        out, (h, c) = self.lstm(x, hx)
+        logits = self.fc(out[:, -1, :])
+        return logits, (h, c)
+
+
+# Load trained model
+policy = AllocatorPolicy()
+ckpt = os.path.join(os.path.dirname(__file__), 'allocator_best.pt')
+policy.load_state_dict(torch.load(ckpt, map_location='cpu'))
+policy.eval()
+
+
+# Allocation
 def allocate(target_allocations, anti_target_allocations, is_target_choices):
     """
-    :param target_allocations: A binary list, where True values at index i
-            indicate a reward was allocated to the target side on trial i.
-    :param anti_target_allocations: A binary list, where True values at index i
-            indicate a reward was allocated to the anti-target side on trial i.
-    :param is_target_choices: A binary list, where True values at index i
-            indicate the target_side was chosen on that index.
-    :return: A two-element tuple where the first binary element indicate
-                whether a reward should be allocated to the target side,
-                and the second whether a reward should be allocated to the
-                anti-target side.
+    target = left
+    anti-target = right
     """
-    trial = len(target_allocations)
-    # In first two trials put rewards in the target side only
-    if trial < 2:
-        return REWARD, NO_REWARD
 
-    target_alternative, anti_target_alternative = None, None
-    # If previous choice was of the target side
-    if is_target_choices[-1]:
-        # If the choice yielded a reward
-        if target_allocations[-1] == REWARD:
-            # A WSLS agent will choose this side again - so assign a reward to
-            # the target side again and also a reward to the anti-target side,
-            # since the agent will not choose it currently so it's a way to
-            # "discard" rewards on the anti-target side on unchosen trials
-            target_alternative, anti_target_alternative = REWARD, REWARD
-        else:
-            # The agent chose the target side but did not receive a reward, so
-            # the agent will switch - put no rewards on the anti-target side
-            # (so the agent won't think it is good) and no reward on the target
-            # side (not to "waste" it)
-            target_alternative, anti_target_alternative = NO_REWARD, NO_REWARD
-    # Previous choice was of the anti-target side
+    trial = len(target_allocations)
+
+    # ---------------- budget ----------------
+    remaining_target = TOTAL_REWARDS - sum(target_allocations)
+    remaining_anti = TOTAL_REWARDS - sum(anti_target_allocations)
+
+    # ---------------- build input ----------------
+    if trial == 0:
+        prev_choice_oh = np.zeros(2, dtype=np.float32)
+        prev_reward = 0.0
     else:
-        # If the choice yielded a reward
-        if anti_target_allocations[-1] == REWARD:
-            # The agent is likely to choose the anti-target again, so don't put
-            # rewards there to discourage such choices. Also, don't put rewards
-            # on the target side so as not to waste them.
-            target_alternative, anti_target_alternative = NO_REWARD, NO_REWARD
-        # The choice did not yield a reward
-        else:
-            # The agent will switch to the target side, so put a reward there
-            # to encourage such choices. Also, put a reward on the anti-target
-            # to "waste" it.
-            target_alternative, anti_target_alternative = REWARD, REWARD
-    # We assume that in the first 15 trials, the user is somewhat
-    # likely to sample the anti-target side so we start assigning
-    # rewards to that side only after the 15th trial
-    if trial < 15:
+        prev_choice_oh = np.zeros(2, dtype=np.float32)
+        prev_choice_oh[bool(is_target_choices[-1])] = 1.0
+
+        prev_reward = (target_allocations[-1] if is_target_choices[-1] else
+                       anti_target_allocations[-1])
+
+    remaining_target_norm = remaining_target / TOTAL_REWARDS
+    remaining_anti_norm = remaining_anti / TOTAL_REWARDS
+
+    x_t = np.concatenate([
+        prev_choice_oh,
+        [prev_reward, remaining_target_norm, remaining_anti_norm]
+    ])
+
+    x = torch.tensor(x_t, dtype=torch.float32).view(1, 1, -1)
+
+    # ---------------- policy decision ----------------
+    with torch.no_grad():
+        logits, _ = policy(x)
+        probs = torch.softmax(logits.squeeze(0), dim=-1)
+
+    # ---------------- action masking ----------------
+    mask = torch.ones_like(probs)
+    if remaining_target <= 0:
+        mask[1] = 0.0
+    if remaining_anti <= 0:
+        mask[2] = 0.0
+
+    if mask.sum() == 0:
+        action = 0
+    else:
+        probs = probs * mask
+        probs = probs / probs.sum()
+        action = int(torch.argmax(probs).item())  # deterministic for platform
+
+    # ---------------- convert action ----------------
+    if action == 1:
+        target_alternative = REWARD
+        anti_target_alternative = NO_REWARD
+    elif action == 2:
+        target_alternative = NO_REWARD
+        anti_target_alternative = REWARD
+    else:
+        target_alternative = NO_REWARD
         anti_target_alternative = NO_REWARD
 
-    return constrain(target_allocations, target_alternative),\
-           constrain(anti_target_allocations, anti_target_alternative)
+    # ---------------- enforce constraints ----------------
+    return (constrain(target_allocations, target_alternative),
+            constrain(anti_target_allocations, anti_target_alternative))
 
 
 def constrain(previous_allocation, current_allocation):

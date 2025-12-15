@@ -247,8 +247,12 @@ function right_button_clicked() {
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /** Feedback management -- start**/
 
-var feedback_yes_img = create_image_node("media/positive_feedback.png");
-var feedback_no_img = create_image_node("media/negative_feedback.png");
+var feedback_yes_img = create_image_node(
+    "instructions/media/positive_feedback.png",
+);
+var feedback_no_img = create_image_node(
+    "instructions/media/negative_feedback.png",
+);
 var feedback_display_father;
 var display_image; // The image that will be currently displayed.
 var enabler_button = create_enabler_button();
@@ -266,7 +270,9 @@ function add_smiley_to_screen() {
      * Present a smiley on the screen
      */
     var reward_holder = document.getElementById("reward_holder");
-    var smiley_img = create_image_node("media/positive_feedback.png");
+    var smiley_img = create_image_node(
+        "instructions/media/positive_feedback.png",
+    );
     smiley_img.setAttribute("width", "40px");
     smiley_img.setAttribute("height", "40px");
     reward_holder.appendChild(smiley_img);
@@ -300,7 +306,7 @@ function hide_feedback() {
         feedback_display_father.removeChild(display_image);
     } else {
         //To synchronize elements, if presentation was not updated yet, wait for it 20ms and try again.
-        setTimeout(20, hide_feedback);
+        setTimeout(hide_feedback, 20);
     }
 }
 /** Feedback management -- end**/

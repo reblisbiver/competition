@@ -22,7 +22,6 @@ function rewards_arrived(reward) {
     if (trial_number == NUMBER_OF_TRIALS) {
         // 新增：调用完整数据保存接口
         var xmlHttp = new XMLHttpRequest();
-        xmlHttp.open("POST", "scripts/save_complete_data.php", true);
         xmlHttp.setRequestHeader("Content-Type", "application/json");
         xmlHttp.send(JSON.stringify({})); // 无需额外数据，通过SESSION获取积累的试次数据
 

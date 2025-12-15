@@ -1,5 +1,24 @@
 <?php
 session_start();
+
+
+// Helper: normalize array elements to integers (0/1) or booleans where appropriate
+function normalize_rewards_array($arr) {
+    if (!is_array($arr)) return array();
+    $out = array();
+    foreach ($arr as $el) {
+        if ($el === null) { $out[] = 0; continue; }
+        if ($el === '') { $out[] = 0; continue; }
+        if (is_bool($el)) { $out[] = $el ? 1 : 0; continue; }
+        if (is_numeric($el)) { $out[] = intval($el); continue; }
+        $low = strtolower(strval($el));
+        if ($low === 'true' || $low === '1') { $out[] = 1; continue; }
+        if ($low === 'false' || $low === '0') { $out[] = 0; continue; }
+        // Fallback: empty -> 0
+        $out[] = 0;
+    }
+    return $out;
+}
 //+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 // Last update: 21.7.2019
 //
@@ -55,12 +74,8 @@ if ($mode == 'ql') {
 }
 // +++++++++++++++++++++++++++++++++++++++++++++
 
-// 新增：根据当前选择的side，更新LEFT/RIGHT计数
-if ($_GET['side'] === 'LEFT') {
-    $_SESSION['left_count']++;
-} elseif ($_GET['side'] === 'RIGHT') {
-    $_SESSION['right_count']++;
-}
+// NOTE: 不再在此处即时累加 left/right 次数（可能导致重复计数或与试次数不同步）
+// 计数将在试次结束时根据 $_SESSION['is_bias_choice'] 重新计算，保证一致性。
 
 /////////////////////////////////////////////////////////////////////////////////
 // Allocate rewards to next trial
@@ -74,16 +89,35 @@ $current_biased_reward = $current_unbiased_reward = NULL;
 //       $_SESSION['schedule_name'] = "my_dynamic_model";
 // The name should refer to a python file that exists in sequences/dynamic folder
 // A good place for this definition is at main.php
-if($_SESSION['schedule_type'] == "DYNAMIC"){ //Game is dynamic
-    $run_python_command = 'python ../sequences/dynamic/'. $_SESSION['schedule_name'] . '.py '
-        . json_encode($_SESSION['bias_rewards']) . ' '
-        . json_encode($_SESSION['unbias_rewards']) . ' '
-        . json_encode($_SESSION['is_bias_choice']) . ' '
-        . json_encode($_SESSION['user_id']);
-    $result_string = exec($run_python_command);
-    $result_array = explode(", ", $result_string);
-    $current_biased_reward = $result_array[0];
-    $current_unbiased_reward = $result_array[1];
+if ($_SESSION['schedule_type'] == "DYNAMIC") { // Game is dynamic
+    // Build full script path and check existence
+    $script_path = __DIR__ . '/../sequences/dynamic/' . $_SESSION['schedule_name'] . '.py';
+    // Prepare command safely using escapeshellarg
+    $python_exec = 'python'; // adjust to 'python3' if your system requires it
+    $arg_bias = json_encode($_SESSION['bias_rewards']);
+    $arg_unbias = json_encode($_SESSION['unbias_rewards']);
+    $arg_isbias = json_encode($_SESSION['is_bias_choice']);
+    $arg_user = json_encode($_SESSION['user_id']);
+
+    $run_python_command = $python_exec
+        . ' ' . escapeshellarg($script_path)
+        . ' ' . escapeshellarg($arg_bias)
+        . ' ' . escapeshellarg($arg_unbias)
+        . ' ' . escapeshellarg($arg_isbias)
+        . ' ' . escapeshellarg($arg_user);
+    exec($run_python_command . ' 2>&1', $output_lines, $return_code);
+    $result_string = count($output_lines) ? implode("\n", $output_lines) : '';
+    $result_array = array_map('trim', explode(',', $result_string));
+
+    // Debug prints to server/terminal (useful when running PHP built-in server or CLI)
+    error_log("DEBUG run_python_command: " . $run_python_command);
+    error_log("DEBUG return_code: " . intval($return_code));
+    error_log("DEBUG output_lines: " . print_r($output_lines, true));
+    error_log("DEBUG result_string: " . $result_string);
+    error_log("DEBUG result_array: " . print_r($result_array, true));
+
+    $current_biased_reward = (int)$result_array[0];
+    $current_unbiased_reward = (int)$result_array[1];
 }
     /////////////////////////////////////////////////////////////////////////////
     // STATIC - Allocation of rewards to next trial
@@ -138,10 +172,10 @@ function write_trial_data_csv($is_biased_choice, $current_reward, $current_unobs
         . PHP_EOL;
     file_put_contents($file_name, $trial_data, FILE_APPEND);
 }
-$path = __DIR__ . "/../../results/" . $_SESSION['schedule_type'] . "/" . $_SESSION['schedule_name'] . "/";
-if (!file_exists($path)) { // Create the results directory for current mechanism if it doesn't exist yest
-    mkdir($path, 0777, true);
-}
+ $path = __DIR__ . "/../../real_results/"; // unified results folder at workspace root (merged storage)
+ if (!file_exists($path)) { // Create the real_results directory if it doesn't exist
+     mkdir($path, 0777, true);
+ }
 write_trial_data_csv($is_biased_choice, $current_reward, $current_unobserved_reward, $path);
 
 // +++++++++++++++ 新增代码：判断是否为最后一次试次，追加总和 +++++++++++++++
@@ -149,16 +183,74 @@ write_trial_data_csv($is_biased_choice, $current_reward, $current_unobserved_rew
 $total_trials = $_SESSION['NUMBER_OF_TRIALS'];
 if ($_SESSION['trial_number'] == $total_trials - 1) { 
     $file_name = $path . $_SESSION['user_id'] . '.csv';
-    // 新增：拼接LEFT/RIGHT选择次数（格式：left_count/right_count）
-    $side_choice_stats = $_SESSION['left_count'] . '/' . $_SESSION['right_count'];
-    // 构造总和行（与CSV现有列对应，仅填充必要字段）
-    $total_line = "total, , " . 
-      $_SESSION['schedule_type'] . ", " . 
-      $_SESSION['schedule_name'] . ", , " . 
-      $side_choice_stats . ", , " .  // side_choice列填LEFT/RIGHT次数
-      $_SESSION["total_reward"] . ", , , " . 
-      PHP_EOL;
+    // 构造总和行：total, user_id, schedule_type, schedule_name,
+    //               biased_side, biased_count, unbiased_side, unbiased_count, rewards, total_reward
+    $user_id = isset($_SESSION['user_id']) ? $_SESSION['user_id'] : 'Error_NoUserID';
+    $sched_type = isset($_SESSION['schedule_type']) ? $_SESSION['schedule_type'] : 'Error_NoSchedType';
+    $sched_name = isset($_SESSION['schedule_name']) ? $_SESSION['schedule_name'] : 'Error_NoSchedName';
+    // Determine biased/unbiased counts based on which side was assigned biased in session
+    $biased_side_name = isset($_SESSION[$biased_side]) ? $_SESSION[$biased_side] : 'LEFT';
+    $unbiased_side_name = isset($_SESSION[$unbiased_side]) ? $_SESSION[$unbiased_side] : 'RIGHT';
+    // Recompute left/right counts from is_bias_choice array to ensure consistency
+    $is_bias_arr = isset($_SESSION['is_bias_choice']) && is_array($_SESSION['is_bias_choice']) ? $_SESSION['is_bias_choice'] : array();
+    $count_bias_true = 0;
+    $count_bias_false = 0;
+    foreach ($is_bias_arr as $v) {
+        $val = strtolower(strval($v));
+        if ($val === 'true' || $v === 1 || $v === '1') {
+            $count_bias_true++;
+        } elseif ($val === 'false' || $v === 0 || $v === '0') {
+            $count_bias_false++;
+        }
+        // ignore other/invalid entries
+    }
+    // Map to biased/unbiased and left/right depending on which side was marked biased in session
+    if ($biased_side_name === 'LEFT') {
+        $biased_count = $count_bias_true;
+        $unbiased_count = $count_bias_false;
+        $left_count = $biased_count;
+        $right_count = $unbiased_count;
+    } else {
+        $biased_count = $count_bias_true;
+        $unbiased_count = $count_bias_false;
+        $right_count = $biased_count;
+        $left_count = $unbiased_count;
+    }
+    
+    $total_reward = isset($_SESSION['total_reward']) ? intval($_SESSION['total_reward']) : 0;
+
+    $total_line = "total, "
+        . $user_id . ", "
+        . $sched_type . ", "
+        . $sched_name . ", "
+        . "biased_side" . ", "
+        . $biased_count . ", "
+        . "unbiased_side" . ", "
+        . $unbiased_count . ", "
+        . "rewards, " . $total_reward
+        . PHP_EOL;
     file_put_contents($file_name, $total_line, FILE_APPEND);
+    // 更新 schedules_counts.json 中对应 schedule 的调用计数（最小实现）
+    $counts_file = __DIR__ . '/../schedules_counts.json';
+    $counts = array();
+    if (file_exists($counts_file)){
+        $raw = file_get_contents($counts_file);
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) $counts = $decoded;
+    }
+    $sname = isset($_SESSION['schedule_name']) ? $_SESSION['schedule_name'] : '';
+    if ($sname !== ''){
+        if (!isset($counts[$sname])) $counts[$sname] = 0;
+        $counts[$sname] = intval($counts[$sname]) + 1;
+        file_put_contents($counts_file, json_encode($counts, JSON_PRETTY_PRINT));
+        // 另外写一行简单日志，便于人工查看
+        $log_file = __DIR__ . '/../schedules_calls.log';
+        $log_line = date('c') . "\t" . $sname . "\n";
+        file_put_contents($log_file, $log_line, FILE_APPEND);
+        error_log('DEBUG: incremented schedule count for ' . $sname);
+    } else {
+        error_log('WARNING: schedule_name empty when attempting to increment count');
+    }
 }
 // ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 

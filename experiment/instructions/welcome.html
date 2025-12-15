@@ -55,13 +55,13 @@
                         部分选择会奖励笑脸表情（☺），你的目标是收集尽可能多的笑脸表情。
 
                         <br /><br />
-                        除参与费（0.40美元）外，你每收集一个笑脸表情还将获得额外0.01美元的奖金。
+                        除参与费（5元）外，你每收集一个笑脸表情还将获得额外0.2元的奖励。
 
                         <br /><br />
-                        完成任务后，你将收到Amazon Mechanical Turk的支付码。
+                        完成选项任务后，你需要填写一份问卷，主试将会根据问卷的信息，通过“加微信好友-转账”的形式支付最终费用。
 
                         <br /><br />
-                        你可以随时关闭浏览器窗口停止参与。点击下方的“开始”按钮即表示你同意参与本游戏。
+                        你可以随时关闭浏览器窗口停止参与。但仅有完成全部试次方能获取费用。请注意页面无法保存数据，请保证一次性完成。
 
                         <br /><br />
                         准备就绪后，请点击下方的“开始”按钮。
@@ -79,35 +79,50 @@
         </div>
 
         <footer class="container-fluid consent">
-            这是“选择工程竞赛”（Choice Engineering Competition）中使用的实验副本
+            <!-- 这是“选择工程竞赛”（Choice Engineering Competition）中使用的实验副本
             <a href="https://sites.google.com/view/cec19/home">选择工程竞赛</a>
-            欢迎随意体验。
+            欢迎随意体验。 -->
         </footer>
 
         <div id="start_button" class="centered_content">
             <br />
-            <a class="btn btn-primary" id="start-btn" href="../main.php" role="button">开始</a>
+            <a
+                class="btn btn-primary"
+                id="start-btn"
+                href="../main.php"
+                role="button"
+                >开始</a
+            >
         </div>
-        
+
         <script>
             // 自动将URL参数传递给main.php
-            document.addEventListener('DOMContentLoaded', function() {
+            document.addEventListener("DOMContentLoaded", function () {
                 const params = new URLSearchParams(window.location.search);
-                let href = '../main.php';
-                
-                if (params.has('schedule_type') || params.has('schedule_name')) {
-                    href += '?';
+                let href = "../main.php";
+
+                if (
+                    params.has("schedule_type") ||
+                    params.has("schedule_name")
+                ) {
+                    href += "?";
                     const parts = [];
-                    if (params.has('schedule_type')) {
-                        parts.push('schedule_type=' + encodeURIComponent(params.get('schedule_type')));
+                    if (params.has("schedule_type")) {
+                        parts.push(
+                            "schedule_type=" +
+                                encodeURIComponent(params.get("schedule_type")),
+                        );
                     }
-                    if (params.has('schedule_name')) {
-                        parts.push('schedule_name=' + encodeURIComponent(params.get('schedule_name')));
+                    if (params.has("schedule_name")) {
+                        parts.push(
+                            "schedule_name=" +
+                                encodeURIComponent(params.get("schedule_name")),
+                        );
                     }
-                    href += parts.join('&');
+                    href += parts.join("&");
                 }
-                
-                document.getElementById('start-btn').href = href;
+
+                document.getElementById("start-btn").href = href;
             });
         </script>
     </body>
