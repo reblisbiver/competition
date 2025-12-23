@@ -82,6 +82,20 @@ foreach ($schedule_list as $name) {
 // write back if we added entries
 file_put_contents($counts_file, json_encode($counts, JSON_PRETTY_PRINT));
 
+
+// 如果所有模型的收集次数均已达到或超过 8，则直接提示上限并退出
+$min_count_overall = null;
+foreach ($counts as $v) {
+    $c = intval($v);
+    if ($min_count_overall === null || $c < $min_count_overall) {
+        $min_count_overall = $c;
+    }
+}
+if ($min_count_overall !== null && $min_count_overall >= 50) {
+    echo "今日数据收集已达上限，非常感谢您的参与，欢迎您明天再次参与";
+    exit;
+}
+
 // Read from URL parameters or use defaults for schedule_type (may be overridden below)
 $_SESSION['schedule_type'] = isset($_GET['schedule_type']) ? strtoupper($_GET['schedule_type']) : $TYPE_DYNAMIC;
 if ($_SESSION['schedule_type'] !== $TYPE_DYNAMIC && $_SESSION['schedule_type'] !== $TYPE_STATIC) {
@@ -160,11 +174,11 @@ $_SESSION["total_reward"] = 0;
                 <li class="inactive_nav">(3) 领取报酬</li>
                 <li id="filler">(4) 填充项 </li>
             </ul>
-            <ul class="nav navbar-nav navbar-right">
+            <!-- <ul class="nav navbar-nav navbar-right">
                 <li>
                     <p class="navbar-text" style="margin-right:10px; color:#ddd;">Schedule: <?php echo htmlspecialchars($_SESSION['schedule_name']); ?></p>
                 </li>
-            </ul>
+            </ul> -->
         </div>
     </div>
 </nav>

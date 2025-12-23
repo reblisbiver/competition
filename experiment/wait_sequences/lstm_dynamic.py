@@ -100,8 +100,9 @@ class AllocatorPolicy(nn.Module):
 
 # Load trained model
 policy = AllocatorPolicy()
-ckpt = os.path.join(os.path.dirname(__file__), 'allocator_best.pt')
+ckpt = os.path.join(os.path.dirname(__file__), 'allocator_best3.pt')
 policy.load_state_dict(torch.load(ckpt, map_location='cpu'))
+# policy.load_state_dict(torch.load("allocator_best3.pt", map_location="cpu", weights_only=True))
 policy.eval()
 
 
@@ -117,6 +118,7 @@ def allocate(target_allocations, anti_target_allocations, is_target_choices):
     # ---------------- budget ----------------
     remaining_target = TOTAL_REWARDS - sum(target_allocations)
     remaining_anti = TOTAL_REWARDS - sum(anti_target_allocations)
+    remaining_trials = NUMBER_OF_TRIALS - trial
 
     # ---------------- build input ----------------
     if trial == 0:
@@ -129,12 +131,15 @@ def allocate(target_allocations, anti_target_allocations, is_target_choices):
         prev_reward = (target_allocations[-1] if is_target_choices[-1] else
                        anti_target_allocations[-1])
 
-    remaining_target_norm = remaining_target / TOTAL_REWARDS
-    remaining_anti_norm = remaining_anti / TOTAL_REWARDS
+    # remaining_target_norm = remaining_target / TOTAL_REWARDS
+    # remaining_anti_norm = remaining_anti / TOTAL_REWARDS
 
     x_t = np.concatenate([
         prev_choice_oh,
-        [prev_reward, remaining_target_norm, remaining_anti_norm]
+        [
+            prev_reward, remaining_target / TOTAL_REWARDS,
+            remaining_anti / TOTAL_REWARDS
+        ]
     ])
 
     x = torch.tensor(x_t, dtype=torch.float32).view(1, 1, -1)
@@ -151,12 +156,11 @@ def allocate(target_allocations, anti_target_allocations, is_target_choices):
     if remaining_anti <= 0:
         mask[2] = 0.0
 
-    if mask.sum() == 0:
-        action = 0
-    else:
-        probs = probs * mask
-        probs = probs / probs.sum()
-        action = int(torch.argmax(probs).item())  # deterministic for platform
+    masked_probs = probs * mask
+    masked_probs = masked_probs / masked_probs.sum()  # renormalize
+
+    m = Categorical(masked_probs)
+    action = int(m.sample().item())
 
     # ---------------- convert action ----------------
     if action == 1:
@@ -280,6 +284,37 @@ def parse_lst(lst):
     return as_python_elements
 
 
+def simulate_manual():
+    target_allocations = []
+    anti_target_allocations = []
+    is_target_choices = []
+
+    for t in range(NUMBER_OF_TRIALS):
+        print(f"\n--- Trial {t} ---")
+
+        # 1️ allocator 决策（基于过去）
+        target_r, anti_r = allocate(target_allocations,
+                                    anti_target_allocations, is_target_choices)
+
+        print(f"Allocator gives: target={target_r}, anti={anti_r}")
+
+        # 2 被试看到奖励后再选择
+        choice = int(input("Subject choice (1=target/left, 0=anti/right): "))
+        is_target_choices.append(choice)
+
+        # 3️ 记录本 trial 奖励
+        target_allocations.append(target_r)
+        anti_target_allocations.append(anti_r)
+
+        print(f"Remaining target: {TOTAL_REWARDS - sum(target_allocations)}")
+        print(
+            f"Remaining anti: {TOTAL_REWARDS - sum(anti_target_allocations)}")
+
+    print("\n=== DONE ===")
+    print("Target total:", sum(target_allocations))
+    print("Anti total:", sum(anti_target_allocations))
+
+
 ###############################################################################
 # Run
 ###############################################################################
@@ -288,3 +323,4 @@ if __name__ == '__main__':
     input = parse_input()
     allocation = allocate(*input)
     output(*allocation)
+    # simulate_manual()

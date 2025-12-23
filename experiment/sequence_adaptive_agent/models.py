@@ -4,15 +4,12 @@ import torch.nn.functional as F
 
 
 class MLPPolicy(nn.Module):
+
     def __init__(self, input_dim, hidden_dim=128):
         super().__init__()
-        self.net = nn.Sequential(
-            nn.Linear(input_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 1)
-        )
+        self.net = nn.Sequential(nn.Linear(input_dim, hidden_dim), nn.ReLU(),
+                                 nn.Linear(hidden_dim, hidden_dim), nn.ReLU(),
+                                 nn.Linear(hidden_dim, 1))
 
     def forward(self, x):
         # logits for giving reward to TARGET (vs anti)
@@ -20,9 +17,13 @@ class MLPPolicy(nn.Module):
 
 
 class LSTMPolicy(nn.Module):
+
     def __init__(self, input_dim, hidden_dim=128, num_layers=1):
         super().__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=num_layers, batch_first=True)
+        self.lstm = nn.LSTM(input_dim,
+                            hidden_dim,
+                            num_layers=num_layers,
+                            batch_first=True)
         self.fc = nn.Linear(hidden_dim, 1)
 
     def forward(self, x, hx=None):
@@ -34,9 +35,13 @@ class LSTMPolicy(nn.Module):
 
 
 class GRUPolicy(nn.Module):
+
     def __init__(self, input_dim, hidden_dim=128, num_layers=1):
         super().__init__()
-        self.gru = nn.GRU(input_dim, hidden_dim, num_layers=num_layers, batch_first=True)
+        self.gru = nn.GRU(input_dim,
+                          hidden_dim,
+                          num_layers=num_layers,
+                          batch_first=True)
         self.fc = nn.Linear(hidden_dim, 1)
 
     def forward(self, x, hx=None):
@@ -46,25 +51,52 @@ class GRUPolicy(nn.Module):
 
 
 class BiLSTMPolicy(nn.Module):
-    def __init__(self, input_dim, hidden_dim=128, num_layers=1, dropout=0.0):
+    """Dual-head BiLSTM policy.
+
+    Given an input sequence of shape (batch, seq_len, input_dim), outputs two
+    independent logits (batch, 2):
+    - logit[0]: probability of allocating reward to target side
+    - logit[1]: probability of allocating reward to anti-target side
+
+    The calling code may enforce exact per-side budgets (25/100) externally.
+    """
+
+    def __init__(self,
+                 input_dim: int,
+                 hidden_dim: int = 128,
+                 num_layers: int = 1,
+                 dropout: float = 0.0):
         super().__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers=num_layers, batch_first=True, bidirectional=True)
-        self.dropout = nn.Dropout(dropout) if dropout and dropout > 0.0 else None
-        self.fc = nn.Linear(hidden_dim * 2, 1)
+        self.lstm = nn.LSTM(
+            input_dim,
+            hidden_dim,
+            num_layers=num_layers,
+            batch_first=True,
+            bidirectional=True,
+            dropout=float(dropout) if
+            (num_layers > 1 and dropout and dropout > 0.0) else 0.0,
+        )
+        self.dropout = nn.Dropout(
+            dropout) if dropout and dropout > 0.0 else None
+        self.fc = nn.Linear(hidden_dim * 2, 2)
 
     def forward(self, x, hx=None):
         out, h = self.lstm(x, hx)
         last = out[:, -1, :]
         if self.dropout is not None:
             last = self.dropout(last)
-        return self.fc(last).squeeze(-1), h
+        return self.fc(last), h
 
 
 class ConvPolicy(nn.Module):
+
     def __init__(self, input_dim, hidden_dim=64, kernel_size=3):
         super().__init__()
         # input: (batch, seq_len, input_dim) -> conv1d requires (batch, channels, seq_len)
-        self.conv = nn.Conv1d(in_channels=input_dim, out_channels=hidden_dim, kernel_size=kernel_size, padding=kernel_size//2)
+        self.conv = nn.Conv1d(in_channels=input_dim,
+                              out_channels=hidden_dim,
+                              kernel_size=kernel_size,
+                              padding=kernel_size // 2)
         self.pool = nn.AdaptiveAvgPool1d(1)
         self.fc = nn.Linear(hidden_dim, 1)
 
@@ -77,10 +109,12 @@ class ConvPolicy(nn.Module):
 
 
 class TransformerPolicy(nn.Module):
+
     def __init__(self, input_dim, hidden_dim=64, nhead=4, nlayers=2):
         super().__init__()
         self.input_proj = nn.Linear(input_dim, hidden_dim)
-        encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_dim, nhead=nhead)
+        encoder_layer = nn.TransformerEncoderLayer(d_model=hidden_dim,
+                                                   nhead=nhead)
         self.encoder = nn.TransformerEncoder(encoder_layer, num_layers=nlayers)
         self.fc = nn.Linear(hidden_dim, 1)
 

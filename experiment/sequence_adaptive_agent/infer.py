@@ -1,232 +1,288 @@
 import os
-import json
-import torch
-import numpy as np
+import sys
+import importlib.util
+import random
+from typing import List, Tuple, Optional
 
-# Attempt flexible import of models module so infer.py works when imported
-# as a package or loaded from file path by other scripts.
+import numpy as np
+import torch
+
+def _ensure_repo_root_on_syspath():
+	# infer.py lives in: <repo_root>/experiment/sequence_adaptive_agent/infer.py
+	# To import `experiment.*`, sys.path must include <repo_root>.
+	here = os.path.dirname(__file__)
+	repo_root = os.path.abspath(os.path.join(here, '..', '..'))
+	if repo_root not in sys.path:
+		sys.path.insert(0, repo_root)
+
+
+def _load_models_module_fallback():
+	"""Load models.py by path as a last resort (no package import needed)."""
+	models_path = os.path.join(os.path.dirname(__file__), 'models.py')
+	spec = importlib.util.spec_from_file_location('sequence_adaptive_agent.models', models_path)
+	if spec is None or spec.loader is None:
+		raise ImportError(f'Failed to create spec for models.py at {models_path}')
+	mod = importlib.util.module_from_spec(spec)
+	spec.loader.exec_module(mod)
+	return mod
+
+
+_ensure_repo_root_on_syspath()
+
+# Import models in a way that works both in-repo and in the competition runner.
 try:
-    from experiment.sequence_adaptive_agent import models
+	from experiment.sequence_adaptive_agent import models  # type: ignore
 except Exception:
-    try:
-        from sequence_adaptive_agent import models
-    except Exception:
-        # Fallback: load models.py by filesystem path relative to this file
-        import importlib.util
-        this_dir = os.path.dirname(__file__)
-        models_path = os.path.join(this_dir, 'models.py')
-        spec = importlib.util.spec_from_file_location(
-            'sequence_adaptive_agent.models', models_path)
-        mod_models = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(mod_models)
-        models = mod_models
+	models = _load_models_module_fallback()
+
 
 ROOT_DIR = os.path.dirname(__file__)
-OUTDIR = os.path.join(ROOT_DIR, 'output_overnight')
+
+# Checkpoint lookup configuration
+_PREFERRED_OUTDIR_NAME = 'output_overnight_resume_20251216'
+_CKPT_SEARCH_LOCATIONS: List[str] = []
+
+TOTAL_TRIALS = 100
+PER_SIDE = 25
+INPUT_DIM = 7
 
 
-def _find_checkpoint():
-    # Find the most recent checkpoint across any output_overnight* directories.
-    root = os.path.dirname(__file__)
-    cand_files = []
-    for name in os.listdir(root):
-        if name.startswith('output_overnight') and os.path.isdir(
-                os.path.join(root, name)):
-            d = os.path.join(root, name)
-            for f in os.listdir(d):
-                if f.endswith('.pt'):
-                    cand_files.append(os.path.join(d, f))
-    # also check default OUTDIR
-    if os.path.isdir(OUTDIR):
-        for f in os.listdir(OUTDIR):
-            if f.endswith('.pt'):
-                cand_files.append(os.path.join(OUTDIR, f))
+def _find_checkpoint() -> Optional[str]:
+	"""Find the bilstm checkpoint under a specific output directory.
 
-    if not cand_files:
-        return None
-    # return newest by modification time
-    cand_files.sort(key=lambda p: os.path.getmtime(p), reverse=True)
-    return cand_files[0]
+	To reduce ambiguity, we only look under:
+	- experiment/sequence_adaptive_agent/output_overnight_resume_20251216/
 
+	Prefers bilstm_best.pt if present, else newest *.pt by mtime.
+	"""
+	global _CKPT_SEARCH_LOCATIONS
+	root = os.path.dirname(__file__)
+	preferred_dir = os.path.join(root, _PREFERRED_OUTDIR_NAME)
+	local_best = os.path.join(root, 'bilstm_best.pt')
 
-def _load_model(device='cpu'):
-    ckpt = _find_checkpoint()
-    if ckpt is None:
-        return None
-    # try to load checkpoint and infer architecture if needed
-    data = torch.load(ckpt, map_location=device)
-    state = data.get('state_dict', data) if isinstance(data, dict) else data
+	searched: List[str] = []
+	# 1) Explicit override (useful in remote runners)
+	env_ckpt = os.environ.get('BILSTM_CHECKPOINT', '').strip()
+	if env_ckpt:
+		searched.append(f'ENV:BILSTM_CHECKPOINT={env_ckpt}')
+		if os.path.isfile(env_ckpt):
+			_CKPT_SEARCH_LOCATIONS = searched
+			return env_ckpt
 
-    # helper to strip module. prefix
-    def _strip_state(s):
-        if not isinstance(s, dict):
-            return s
-        new = {}
-        for k, v in s.items():
-            nk = k.replace('module.', '')
-            new[nk] = v
-        return new
+	# 2) Preferred output directory
+	searched.append(preferred_dir)
+	cand_files: List[str] = []
+	if os.path.isdir(preferred_dir):
+		for f in os.listdir(preferred_dir):
+			if f.endswith('.pt'):
+				cand_files.append(os.path.join(preferred_dir, f))
 
-    state = _strip_state(state)
+	# 3) Fallback: local directory (same folder as infer.py)
+	searched.append(root)
+	if os.path.isfile(local_best):
+		_CKPT_SEARCH_LOCATIONS = searched
+		return local_best
+	try:
+		for f in os.listdir(root):
+			if f.endswith('.pt'):
+				cand_files.append(os.path.join(root, f))
+	except Exception:
+		pass
 
-    # attempt default construction first
-    try:
-        policy = models.BiLSTMPolicy(input_dim=7, hidden_dim=128, num_layers=1)
-        policy.load_state_dict(state)
-        policy.to(device)
-        policy.eval()
-        return policy
-    except Exception:
-        # try to infer hidden_dim from fc weight shape if available
-        try:
-            if 'fc.weight' in state:
-                fc_w = state['fc.weight']
-            elif 'fc.weight' in state:
-                fc_w = state['fc.weight']
-            else:
-                # find any weight name for fc
-                fc_w = None
-                for k in state.keys():
-                    if k.endswith('fc.weight') or k.endswith('.fc.weight'):
-                        fc_w = state[k]
-                        break
-            if fc_w is not None:
-                in_features = fc_w.shape[1]
-                # bilstm is bidirectional so hidden_dim*2 == in_features
-                inferred_h = max(1, int(in_features // 2))
-            else:
-                inferred_h = 128
-        except Exception:
-            inferred_h = 128
+	# 4) Legacy fallback: any output_overnight* dir under this folder
+	try:
+		for name in os.listdir(root):
+			if name.startswith('output_overnight') and os.path.isdir(os.path.join(root, name)):
+				d = os.path.join(root, name)
+				searched.append(d)
+				best_in_dir = os.path.join(d, 'bilstm_best.pt')
+				if os.path.isfile(best_in_dir):
+					_CKPT_SEARCH_LOCATIONS = searched
+					return best_in_dir
+				for f in os.listdir(d):
+					if f.endswith('.pt'):
+						cand_files.append(os.path.join(d, f))
+	except Exception:
+		pass
 
-    # final attempt with inferred hidden dim
-    policy = models.BiLSTMPolicy(input_dim=7,
-                                 hidden_dim=inferred_h,
-                                 num_layers=1)
-    try:
-        policy.load_state_dict(state)
-    except Exception:
-        # try stripped keys again
-        try:
-            policy.load_state_dict(_strip_state(state))
-        except Exception:
-            # as a last resort, load partial matching keys (ignore missing)
-            sd = policy.state_dict()
-            for k, v in state.items():
-                if k in sd and sd[k].shape == v.shape:
-                    sd[k] = v
-            policy.load_state_dict(sd)
-    policy.to(device)
-    policy.eval()
-    return policy
+	_CKPT_SEARCH_LOCATIONS = searched
+	if not cand_files:
+		return None
+
+	# Prefer an explicit best checkpoint if present.
+	best = [p for p in cand_files if os.path.basename(p) == 'bilstm_best.pt']
+	if best:
+		return best[0]
+
+	# Otherwise choose newest by mtime.
+	cand_files.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+	return cand_files[0]
 
 
-# cached model
-_MODEL = None
+def _strip_state_dict(sd: dict) -> dict:
+	return {k.replace('module.', ''): v for k, v in sd.items()}
 
 
-def bilstm_infer(target_allocations, anti_target_allocations,
-                 is_target_choices):
-    """
-    Expected inputs: lists of 0/1 values. Return (target_alloc, anti_target_alloc) as ints 0/1.
-    This function loads the trained BiLSTM policy and uses it to produce a
-    probability for allocating reward to the target side. We then threshold
-    at 0.5 and map to a (target, anti) pair. Minimal budget checks applied.
-    """
-    global _MODEL
-    if _MODEL is None:
-        _MODEL = _load_model(device='cpu')
-        if _MODEL is None:
-            raise RuntimeError(
-                'No bilstm checkpoint found in output_overnight')
+def _load_model(device: str = 'cpu') -> Optional[torch.nn.Module]:
+	ckpt = _find_checkpoint()
+	if ckpt is None:
+		return None
 
-    # sanitize inputs
-    targ = list(map(
-        int, target_allocations)) if target_allocations is not None else []
-    anti = list(map(int, anti_target_allocations)
-                ) if anti_target_allocations is not None else []
-    choices = list(map(
-        int, is_target_choices)) if is_target_choices is not None else []
+	data = torch.load(ckpt, map_location=device, weights_only=False)
+	if isinstance(data, dict):
+		state = data.get('state_dict', data)
+		meta = data.get('meta', {})
+	else:
+		state = data
+		meta = {}
 
-    trial = max(len(targ), len(anti), len(choices))
+	state = _strip_state_dict(state)
+	hidden_dim = int(meta.get('hidden_dim', 128))
+	num_layers = int(meta.get('num_layers', 1))
+	dropout = float(meta.get('dropout', 0.0))
 
-    # --- 新逻辑：严格按 100 试次、每侧必须 25 个的约束来计算剩余量与可行性 ---
-    TOTAL_TRIALS = 100
-    TARGET_PER_SIDE = 25
-    TOTAL_REWARD_TRIALS = TARGET_PER_SIDE * 2  # 总共要分配的奖励次数（两侧合计）
+	policy = models.BiLSTMPolicy(input_dim=INPUT_DIM, hidden_dim=hidden_dim, num_layers=num_layers, dropout=dropout)
+	policy.load_state_dict(state)
+	policy.to(device)
+	policy.eval()
+	return policy
 
-    allocated_t = sum(targ)
-    allocated_a = sum(anti)
-    allocated_total = allocated_t + allocated_a
 
-    rem_t = max(0, TARGET_PER_SIDE - allocated_t)
-    rem_a = max(0, TARGET_PER_SIDE - allocated_a)
-    rem_total = max(0, TOTAL_REWARD_TRIALS - allocated_total)
+_MODEL: Optional[torch.nn.Module] = None
 
-    trials_left = max(0, TOTAL_TRIALS - trial)  # 包括当前决策后的剩余槽位数
 
-    # prepare a single-step input representing next trial state
-    t_norm = float(trial) / float(TOTAL_TRIALS)
-    # 归一化用目标侧剩余比率（避免除0）
-    rem_t_norm = float(rem_t) / float(
-        TARGET_PER_SIDE) if TARGET_PER_SIDE > 0 else 0.0
-    rem_a_norm = float(rem_a) / float(
-        TARGET_PER_SIDE) if TARGET_PER_SIDE > 0 else 0.0
-    # placeholder zeros for the three middle features
-    zeros = [0.0, 0.0, 0.0]
-    last_choice = float(choices[-1]) if len(choices) > 0 else 0.0
+def _build_feature_seq(
+	target_allocations: List[int],
+	anti_target_allocations: List[int],
+	is_target_choices: List[int],
+) -> torch.Tensor:
+	"""Build (1, seq_len, 7) features for the policy, up to current trial."""
+	targ = list(target_allocations)
+	anti = list(anti_target_allocations)
+	choices = list(is_target_choices)
 
-    feat = np.array([t_norm, rem_t_norm, rem_a_norm] + zeros + [last_choice],
-                    dtype=np.float32)
-    x = torch.from_numpy(feat).unsqueeze(0).unsqueeze(0)  # (1,1,7)
+	trial = max(len(targ), len(anti), len(choices))
 
-    with torch.no_grad():
-        out = _MODEL(x)
-        if isinstance(out, tuple):
-            logits = out[0]
-        else:
-            logits = out
-        prob = torch.sigmoid(logits).item()
+	# pad histories to same length (previous trials)
+	if len(targ) < trial:
+		targ.extend([0] * (trial - len(targ)))
+	if len(anti) < trial:
+		anti.extend([0] * (trial - len(anti)))
+	if len(choices) < trial:
+		choices.extend([0] * (trial - len(choices)))
 
-    # 决策规则（保证在总体约束下可行）
-    # 强制情形：若某侧的剩余奖励等于剩余试次，则必须在每剩余试次里分配该侧
-    must_alloc_t = (rem_t >= trials_left) and (trials_left > 0)
-    must_alloc_a = (rem_a >= trials_left) and (trials_left > 0)
-    # 若 rem_total == trials_left，则本 trial 必须分配（任意一侧）
-    must_alloc_any = (rem_total >= trials_left) and (trials_left > 0)
+	feats = []
+	for i in range(trial + 1):
+		rem_t = max(0, PER_SIDE - sum(targ[:i]))
+		rem_a = max(0, PER_SIDE - sum(anti[:i]))
 
-    target_alloc = 0
-    anti_alloc = 0
+		choice_rate = float(np.mean(choices[:i])) if i > 0 else 0.5
+		last_choice = float(choices[i - 1]) if i > 0 else 0.0
 
-    if rem_total <= 0:
-        # 已经分配完全部奖励，不能再分配
-        target_alloc = 0
-        anti_alloc = 0
-    elif must_alloc_t:
-        target_alloc = 1
-        anti_alloc = 0
-    elif must_alloc_a:
-        anti_alloc = 1
-        target_alloc = 0
-    elif must_alloc_any:
-        # 必须分配一个奖励，但哪一侧由模型偏好决定（且侧剩余>0）
-        if prob > 0.5 and rem_t > 0:
-            target_alloc = 1
-        elif rem_a > 0:
-            anti_alloc = 1
-        elif rem_t > 0:
-            target_alloc = 1
-    else:
-        # 非强制情形：由模型偏好决定是否分配；可产生 (0,0) 表示本 trial 无奖励
-        # 保守策略：只有当模型偏好明显时才分配（避免过早耗尽配额）
-        # 这里使用 0.5 阈值保持原行为：若 prob>0.5 尝试分配 target（若有剩余）；否则尝试 anti
-        if prob > 0.5 and rem_t > 0:
-            target_alloc = 1
-        elif prob <= 0.5 and rem_a > 0:
-            anti_alloc = 1
-        else:
-            # 模型未给出可用分配，保留为 (0,0)
-            target_alloc = 0
-            anti_alloc = 0
+		if i > 0:
+			last_reward = 1.0 if ((choices[i - 1] == 1 and targ[i - 1] == 1) or (choices[i - 1] == 0 and anti[i - 1] == 1)) else 0.0
+			last_alloc_total = float(targ[i - 1] + anti[i - 1]) / 2.0
+		else:
+			last_reward = 0.0
+			last_alloc_total = 0.0
 
-    return int(target_alloc), int(anti_alloc)
+		feat = np.array(
+			[
+				float(i) / float(TOTAL_TRIALS),
+				float(rem_t) / float(PER_SIDE),
+				float(rem_a) / float(PER_SIDE),
+				choice_rate,
+				last_choice,
+				last_reward,
+				last_alloc_total,
+			],
+			dtype=np.float32,
+		)
+		feats.append(feat)
+
+	x = torch.from_numpy(np.stack(feats, axis=0)).unsqueeze(0)  # (1, seq_len, 7)
+	return x
+
+
+def _decide_with_forcing(p: float, rem: int, trials_left_including_current: int) -> int:
+	"""Decide 0/1 with constraints to guarantee exact PER_SIDE by end."""
+	if rem <= 0:
+		return 0
+
+	# If we must allocate on every remaining trial to reach PER_SIDE, force it.
+	if rem >= trials_left_including_current:
+		return 1
+
+	action = 1 if random.random() < p else 0
+
+	# After taking action, ensure feasibility: rem_after <= trials_left_after
+	trials_left_after = trials_left_including_current - 1
+	rem_after = rem - action
+	if rem_after > trials_left_after:
+		action = 1
+
+	return int(action)
+
+
+def bilstm_infer(
+	target_allocations: List[int],
+	anti_target_allocations: List[int],
+	is_target_choices: List[int],
+) -> Tuple[int, int]:
+	"""Infer next allocations.
+
+	IMPORTANT: Signature and return structure must not change.
+	Inputs are lists of 0/1 (or bool-ish). Returns two ints (0/1):
+	(target_alloc, anti_target_alloc).
+
+	Constraint: over TOTAL_TRIALS, each side must have exactly PER_SIDE allocations.
+	Overlap is allowed (both 1 in the same trial).
+	"""
+	global _MODEL
+	if _MODEL is None:
+		_MODEL = _load_model(device='cpu')
+		if _MODEL is None:
+			preferred = os.path.join(os.path.dirname(__file__), _PREFERRED_OUTDIR_NAME, 'bilstm_best.pt')
+			searched = '\n  - '.join(_CKPT_SEARCH_LOCATIONS) if _CKPT_SEARCH_LOCATIONS else '(none)'
+			raise RuntimeError(
+				'No bilstm checkpoint found.\n'
+				f'Expected (recommended): {preferred}\n'
+				'Also supports env var BILSTM_CHECKPOINT pointing to a .pt file.\n'
+				f'Searched:\n  - {searched}'
+			)
+
+	targ = list(map(int, target_allocations)) if target_allocations is not None else []
+	anti = list(map(int, anti_target_allocations)) if anti_target_allocations is not None else []
+	choices = list(map(bool, is_target_choices)) if is_target_choices is not None else []
+
+	trial = max(len(targ), len(anti), len(choices))
+	if trial >= TOTAL_TRIALS:
+		return 0, 0
+
+	allocated_t = sum(targ)
+	allocated_a = sum(anti)
+	rem_t = max(0, PER_SIDE - allocated_t)
+	rem_a = max(0, PER_SIDE - allocated_a)
+
+	trials_left_including_current = TOTAL_TRIALS - trial
+
+	x = _build_feature_seq(targ, anti, choices)
+
+	with torch.no_grad():
+		out = _MODEL(x)
+		logits = out[0] if isinstance(out, tuple) else out
+		logits_last = logits.squeeze(0)  # (2,)
+		probs = torch.sigmoid(logits_last)
+		p_t = float(probs[0].item())
+		p_a = float(probs[1].item())
+
+	act_t = _decide_with_forcing(p_t, rem_t, trials_left_including_current)
+	act_a = _decide_with_forcing(p_a, rem_a, trials_left_including_current)
+
+	# Hard safety clamps
+	if rem_t <= 0:
+		act_t = 0
+	if rem_a <= 0:
+		act_a = 0
+
+	return int(act_t), int(act_a)

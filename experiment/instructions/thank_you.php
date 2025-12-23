@@ -67,9 +67,6 @@ $final_fee = $base_fee + $float_fee;
             <br>
             <h4>您的编号：</h4>
             <h3 id="payment_id" style="color: #d9534f;"></h3>
-            <p>
-                问卷填写完毕后可以关闭此窗口。
-            </p>
         </div>
         <div class="col-sm-2 sidenav">
         </div>

@@ -1,33 +1,33 @@
 <?php
 session_start(); // 开启会话
+echo "数据已收齐，感谢您的参与";
+// // 1. 健康检查逻辑（保留你要求的代码）
+// if ($_SERVER['REQUEST_URI'] === '/' || $_SERVER['REQUEST_URI'] === '/index.php') {
+//     // Check if this is a health check (no browser headers)
+//     if (!isset($_SERVER['HTTP_ACCEPT']) || strpos($_SERVER['HTTP_ACCEPT'], 'text/html') === false) {
+//         header('Content-Type: text/plain');
+//         http_response_code(200);
+//         echo "OK";
+//         exit;
+//     }
+// }
 
-// 1. 健康检查逻辑（保留你要求的代码）
-if ($_SERVER['REQUEST_URI'] === '/' || $_SERVER['REQUEST_URI'] === '/index.php') {
-    // Check if this is a health check (no browser headers)
-    if (!isset($_SERVER['HTTP_ACCEPT']) || strpos($_SERVER['HTTP_ACCEPT'], 'text/html') === false) {
-        header('Content-Type: text/plain');
-        http_response_code(200);
-        echo "OK";
-        exit;
-    }
-}
-
-// 2. 处理同意/不同意逻辑（点击同意跳转到instructions/welcome.html）
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    if (isset($_POST['agree'])) {
-        // 同意后跳转至指定页面
-        header("Location: instructions/welcome.html"); 
-        exit;
-    } elseif (isset($_POST['disagree'])) {
-        echo "<script>alert('您已选择退出实验，感谢关注！'); window.close();</script>";
-        exit;
-    }
-}
+// // 2. 处理同意/不同意逻辑（点击同意跳转到instructions/welcome.html）
+// if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+//     if (isset($_POST['agree'])) {
+//         // 同意后跳转至指定页面
+//         header("Location: instructions/welcome.html"); 
+//         exit;
+//     } elseif (isset($_POST['disagree'])) {
+//         echo "<script>alert('您已选择退出实验，感谢关注！'); window.close();</script>";
+//         exit;
+//     }
+// }
 
 // 3. 显示知情同意书（默认GET请求/刷新时显示）
 ?>
 <!-- 知情同意书页面（完整迁移过来） -->
-<!DOCTYPE html>
+<!-- <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
@@ -87,4 +87,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
     </div>
 </body>
-</html>
+</html> -->
